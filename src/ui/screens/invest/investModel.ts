@@ -133,15 +133,17 @@ const EMPTY_INPUT: InvestableInput = {
 }
 
 /**
- * The live plan for the budget month containing `today`. Never throws: the engines throw (RangeError and similar)
- * when a stored figure is out of range, and this runs during render on Home, Invest and Debts, so a throw would
- * blank the app. Instead it returns a view whose investable is `{ ok: false, reason: 'invalid-data' }`, which the
+ * The live plan for the budget month containing `today`. In production it never throws: the engines throw
+ * (RangeError and similar) when a stored figure is out of range, and this runs during render on Home, Invest and
+ * Debts. In tests and development only RangeErrors are caught, so other bugs are not hidden. Instead it returns a view whose investable is `{ ok: false, reason: 'invalid-data' }`, which the
  * screens show like any other "no figure" reason.
  */
 export function buildInvestView(data: InvestData, today: ISODate): InvestView {
   try {
     return computeInvestView(data, today)
-  } catch {
+  } catch (e) {
+    // In tests and development anything other than an engine RangeError is a bug: let it surface.
+    if (!(e instanceof RangeError) && (import.meta.env.DEV || import.meta.env.MODE === 'test')) throw e
     return invalidDataView(data, today)
   }
 }

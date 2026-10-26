@@ -403,3 +403,10 @@ describe('understated spending note (part 2, minor 2)', () => {
     expect(buildInvestView(data(), TODAY).unmatchedRepaymentPence).toBe(0)
   })
 })
+
+describe('buildInvestView in tests and development (part 2, minor 1)', () => {
+  it('rethrows errors that are not engine RangeErrors, so bugs are not hidden', () => {
+    const broken = data({ txs: [tx({ date: null as unknown as string })] })
+    expect(() => buildInvestView(broken, TODAY)).toThrow(TypeError)
+  })
+})
