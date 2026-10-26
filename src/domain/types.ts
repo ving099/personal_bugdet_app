@@ -44,6 +44,11 @@ export interface Transaction {
   isTransfer: boolean
   isRefund: boolean
   incomeStreamId?: string
+  /**
+   * True once the owner set the refund or transfer flag by hand. Re-matching after an import then leaves this row's
+   * flags alone. Absent (older rows and backups) means false.
+   */
+  flagsEditedByUser?: boolean
   /** Import batch metadata (ISO date-time and file name); absent on rows imported before it was recorded. */
   importedAt?: string
   sourceFile?: string

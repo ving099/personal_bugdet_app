@@ -150,9 +150,16 @@ export function buildPreview(files: PreviewFile[], existing: Transaction[], acco
   }
 }
 
-/** Transfers first, then refunds: refund matching skips transfers, so the order matters. */
+/**
+ * Transfers first, then refunds: refund matching skips transfers, so the order matters. Rows whose flags the owner
+ * set by hand (`flagsEditedByUser`) keep them and are not paired as transfers; an edited outflow still counts as
+ * purchase history for refunds. Returns new objects in the same order as `txs`.
+ */
 export function reconcileFlags(txs: Transaction[], accounts: Account[]): Transaction[] {
-  return flagRefunds(markTransfers(txs, accounts))
+  const free = txs.filter((t) => !t.flagsEditedByUser)
+  const paired = new Map(markTransfers(free, accounts).map((t) => [t.id, t]))
+  const withTransfers = txs.map((t) => paired.get(t.id) ?? { ...t })
+  return flagRefunds(withTransfers).map((t, i) => (txs[i].flagsEditedByUser ? { ...txs[i] } : t))
 }
 
 /** Rows of `after` whose flags differ from the same position in `before` (both lists in the same order). */
@@ -179,7 +186,9 @@ export function reconcileAfterUndo(remaining: Transaction[], removed: Transactio
           Math.abs(dayNumber(r.date) - dayNumber(t.date)) <= 3,
       )) ||
     (t.isRefund && removed.some((r) => r.amountPence < 0 && merchantKey(r.description) === merchantKey(t.description)))
-  const base = remaining.map((t) => (dependsOnRemoved(t) ? { ...t, isTransfer: false, isRefund: false } : t))
+  const base = remaining.map((t) =>
+    !t.flagsEditedByUser && dependsOnRemoved(t) ? { ...t, isTransfer: false, isRefund: false } : t,
+  )
   return changedFlagRows(remaining, reconcileFlags(base, accounts))
 }
 

@@ -429,7 +429,7 @@ describe('Budget: flags', () => {
     ])
     const row = (await screen.findByText('SHOPCO CREDIT')).closest('li')!
     await user.click(within(row).getByRole('button', { name: /Flags/ }))
-    await waitFor(() => expect(within(row).getByText(/Importing another statement can flag matching transfers again/)).toBeInTheDocument())
+    await waitFor(() => expect(within(row).getByText(/What you choose here stays, even when you import more statements/)).toBeInTheDocument())
     await user.click(within(row).getByRole('checkbox', { name: 'This is a refund' }))
     await waitFor(() => expect(screen.getByText('Marked as a refund.')).toBeInTheDocument())
     expect((await db.transactions.toArray()).find((t) => t.description === 'SHOPCO CREDIT')?.isRefund).toBe(true)

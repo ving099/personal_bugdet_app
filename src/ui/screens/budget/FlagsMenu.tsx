@@ -17,7 +17,7 @@ export function useFlagsMenu(tx: Transaction, onFlag: (tx: Transaction, flag: Fl
     <div className="txn-flags" id={panelId} role="group" aria-label={`Flags for ${tx.description}`}>
       <Checkbox label="This is a refund" checked={tx.isRefund} onChange={(v) => onFlag(tx, 'isRefund', v)} />
       <Checkbox label="This is a transfer" checked={tx.isTransfer} onChange={(v) => onFlag(tx, 'isTransfer', v)} />
-      <p className="field-hint">Importing another statement can flag matching transfers again.</p>
+      <p className="field-hint">What you choose here stays, even when you import more statements.</p>
     </div>
   ) : null
   return { button, panel }

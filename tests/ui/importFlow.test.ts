@@ -114,6 +114,36 @@ describe('flag reconciliation', () => {
   })
 })
 
+describe('flags the owner set by hand (review I3)', () => {
+  it('reconcileFlags never changes a row whose flags the owner edited, and does not pair it', () => {
+    const out = tx({ accountId: 'cur', amountPence: -5000, description: 'TO SAV' })
+    const inn = tx({ accountId: 'sav', amountPence: 5000, description: 'FROM CUR', flagsEditedByUser: true })
+    const after = reconcileFlags([out, inn], accounts)
+    expect(after.map((t) => t.isTransfer)).toEqual([false, false])
+  })
+
+  it('keeps a hand-set refund flag off, and a hand-set transfer flag on', () => {
+    const shop = tx({ amountPence: -1000, description: 'ZARA 12', date: '2026-04-01' })
+    const back = tx({ amountPence: 1000, description: 'ZARA 99', date: '2026-04-05', flagsEditedByUser: true })
+    const odd = tx({ amountPence: -777, description: 'ODD', isTransfer: true, flagsEditedByUser: true })
+    const after = reconcileFlags([shop, back, odd], accounts)
+    expect(after[1].isRefund).toBe(false)
+    expect(after[2].isTransfer).toBe(true)
+  })
+
+  it('an edited purchase still counts as purchase history for refunds', () => {
+    const shop = tx({ amountPence: -1000, description: 'ZARA 12', date: '2026-04-01', flagsEditedByUser: true })
+    const back = tx({ amountPence: 1000, description: 'ZARA 99', date: '2026-04-05' })
+    expect(reconcileFlags([shop, back], accounts)[1].isRefund).toBe(true)
+  })
+
+  it('undo leaves an edited row alone even when its partner is removed', () => {
+    const a = tx({ accountId: 'cur', amountPence: -5000, batchId: 'b1', isTransfer: true })
+    const b = tx({ accountId: 'sav', amountPence: 5000, batchId: 'b2', isTransfer: true, flagsEditedByUser: true })
+    expect(reconcileAfterUndo([b], [a], accounts)).toEqual([])
+  })
+})
+
 describe('summariseBatches', () => {
   it('counts rows per batch, newest first, with legacy batches last', () => {
     const rows = [

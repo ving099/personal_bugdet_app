@@ -34,9 +34,12 @@ export async function recategorise(
   })
 }
 
+/** Sets a flag by hand. The row is marked `flagsEditedByUser`, so later imports do not re-match its flags. */
 export async function setFlag(db: BudgetDB, txId: string, flag: 'isRefund' | 'isTransfer', value: boolean): Promise<void> {
   await db.transaction('rw', db.transactions, async () => {
-    if ((await db.transactions.update(txId, { [flag]: value })) === 0) throw new Error('That transaction no longer exists.')
+    if ((await db.transactions.update(txId, { [flag]: value, flagsEditedByUser: true })) === 0) {
+      throw new Error('That transaction no longer exists.')
+    }
   })
 }
 
