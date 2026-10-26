@@ -11,6 +11,7 @@ import { panelId, tabId } from './components/tabIds'
 import TabNav, { type TabItem } from './components/Tabs'
 import LockScreen from './LockScreen'
 import { DbProvider } from './DbProvider'
+import Wizard from './screens/Wizard'
 import { useMediaQuery } from './useMediaQuery'
 
 type TabKey = 'home' | 'import' | 'budget' | 'debts' | 'invest' | 'settings'
@@ -132,7 +133,7 @@ function Ready({ db }: { db: BudgetDB }) {
   }
   return (
     <DbProvider db={db}>
-      <Shell />
+      {settings.onboardingDone ? <Shell /> : <Wizard />}
     </DbProvider>
   )
 }

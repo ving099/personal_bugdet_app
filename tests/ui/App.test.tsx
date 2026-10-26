@@ -12,9 +12,12 @@ import { setViewportWidth } from './viewport'
 let counter = 0
 const opened: BudgetDB[] = []
 
-function freshDb(): BudgetDB {
+/** A seeded database whose setup wizard is already done, so the tabs show straight away. */
+async function freshDb(): Promise<BudgetDB> {
   const db = openDb(`ui-test-${Date.now()}-${counter++}`)
   opened.push(db)
+  await seedDefaults(db)
+  await db.settings.update('main', { onboardingDone: true })
   return db
 }
 
@@ -36,7 +39,7 @@ async function ready() {
 describe('App shell', () => {
   it('renders the six destinations and switches content on click', async () => {
     const user = userEvent.setup()
-    render(<App db={freshDb()} />)
+    render(<App db={await freshDb()} />)
     await ready()
     const names = ['Home', 'Import', 'Budget', 'Debts & Savings', 'Invest', 'Settings']
     for (const name of names) expect(screen.getByRole('tab', { name })).toBeInTheDocument()
@@ -53,7 +56,7 @@ describe('App shell', () => {
 
   it('moves between tabs with the arrow keys', async () => {
     const user = userEvent.setup()
-    render(<App db={freshDb()} />)
+    render(<App db={await freshDb()} />)
     await ready()
     screen.getByRole('tab', { name: 'Home' }).focus()
     await user.keyboard('{ArrowDown}')
@@ -63,27 +66,26 @@ describe('App shell', () => {
   })
 
   it('uses the bottom bar by default and the sidebar at 900px and above', async () => {
-    const { unmount } = render(<App db={freshDb()} />)
+    const { unmount } = render(<App db={await freshDb()} />)
     await ready()
     expect(screen.getByRole('navigation')).toHaveAttribute('data-variant', 'bottom')
     unmount()
     setViewportWidth(1200)
-    render(<App db={freshDb()} />)
+    render(<App db={await freshDb()} />)
     await ready()
     expect(screen.getByRole('navigation')).toHaveAttribute('data-variant', 'sidebar')
     expect(screen.getByText('Budget', { selector: '.brand' })).toBeInTheDocument()
   })
 
   it('has a skip link and a main landmark', async () => {
-    render(<App db={freshDb()} />)
+    render(<App db={await freshDb()} />)
     await ready()
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
   })
 
   it('follows settings.theme on the html element', async () => {
-    const db = freshDb()
-    await seedDefaults(db)
+    const db = await freshDb()
     await db.settings.update('main', { theme: 'dark' })
     render(<App db={db} />)
     await ready()
@@ -93,7 +95,7 @@ describe('App shell', () => {
   })
 
   it('defaults to the system theme', async () => {
-    render(<App db={freshDb()} />)
+    render(<App db={await freshDb()} />)
     await ready()
     expect(document.documentElement).toHaveAttribute('data-theme', 'system')
   })
@@ -106,7 +108,7 @@ describe('App shell', () => {
       throw new Error('blocked')
     })
     const user = userEvent.setup()
-    render(<App db={freshDb()} />)
+    render(<App db={await freshDb()} />)
     await ready()
     await user.click(screen.getByRole('tab', { name: 'Invest' }))
     expect(screen.getByRole('heading', { level: 1, name: 'Invest' })).toBeInTheDocument()
@@ -114,17 +116,17 @@ describe('App shell', () => {
 
   it('remembers the last tab', async () => {
     const user = userEvent.setup()
-    const first = render(<App db={freshDb()} />)
+    const first = render(<App db={await freshDb()} />)
     await ready()
     await user.click(screen.getByRole('tab', { name: 'Import' }))
     first.unmount()
-    render(<App db={freshDb()} />)
+    render(<App db={await freshDb()} />)
     await ready()
     expect(screen.getByRole('tab', { name: 'Import' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('explains when storage is unavailable', async () => {
-    const db = freshDb()
+    const db = await freshDb()
     vi.spyOn(db, 'transaction').mockRejectedValue(new Error('no storage'))
     render(<App db={db} />)
     expect(await screen.findByText('Storage is unavailable')).toBeInTheDocument()
@@ -140,8 +142,7 @@ describe('Lock screen', () => {
 
   it('blocks the app until the right passcode is entered', async () => {
     const user = userEvent.setup()
-    const db = freshDb()
-    await seedDefaults(db)
+    const db = await freshDb()
     await db.settings.update('main', { appLock: stored })
     render(<App db={db} />)
     const input = await screen.findByLabelText('Passcode')

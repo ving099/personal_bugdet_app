@@ -13,4 +13,6 @@ export const seedSettings: Settings = {
   defaultPlatformByWrapper: {},
   appLock: null,
   theme: 'system',
+  lisaEnabled: false,
+  onboardingDone: false,
 }

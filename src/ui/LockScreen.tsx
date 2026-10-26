@@ -37,7 +37,7 @@ export default function LockScreen({ stored, onUnlock }: LockScreenProps) {
         </label>
         <input
           id={inputId}
-          className="input"
+          className="input input-code"
           type="password"
           inputMode="numeric"
           autoComplete="off"

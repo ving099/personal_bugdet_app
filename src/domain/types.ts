@@ -126,7 +126,11 @@ export interface Settings {
   /** Salted passcode hash; null when the lock is off. */
   appLock: { salt: string; hash: string } | null
   theme: 'system' | 'light' | 'dark'
-  backupLastAt?: string
+  backupLastAt?: ISODate
+  /** Lifetime ISA is off until the owner confirms eligibility. Rows written before this field existed read as false. */
+  lisaEnabled: boolean
+  /** False until the setup wizard is finished or skipped. Rows written before this field existed read as false. */
+  onboardingDone: boolean
 }
 
 export interface Holding {
