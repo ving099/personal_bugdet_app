@@ -34,11 +34,13 @@ const dayNumber = (iso: string) => {
 
 /**
  * Flags equal-and-opposite rows on two different known accounts, at most three
- * days apart, as transfers. Matching is one-to-one, nearest date first, ties
+ * days apart, as transfers. Business accounts never take part: money from the
+ * business is income on the personal side (spec section 8), and the business side
+ * is outside the budget anyway. Matching is one-to-one, nearest date first, ties
  * broken by array order. Returns new objects; rows already flagged stay flagged.
  */
 export function markTransfers(txs: Transaction[], accounts: Account[]): Transaction[] {
-  const known = new Set(accounts.map((a) => a.id))
+  const known = new Set(accounts.filter((a) => a.kind !== 'business').map((a) => a.id))
   const days = txs.map((t) => dayNumber(t.date))
   const candidates: { gap: number; i: number; j: number }[] = []
   for (let i = 0; i < txs.length; i++) {

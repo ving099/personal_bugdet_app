@@ -63,7 +63,7 @@ describe('markTransfers', () => {
   it('is one-to-one: one outflow and two inflows pair only once, nearest date wins', () => {
     const out = tx('cur', '2026-03-10', -3000)
     const far = tx('sav', '2026-03-12', 3000)
-    const near = tx('biz', '2026-03-11', 3000)
+    const near = tx('cur2', '2026-03-11', 3000)
     const res = markTransfers([out, far, near], accounts)
     expect(res.map((t) => t.isTransfer)).toEqual([true, false, true])
   })
@@ -91,6 +91,24 @@ describe('markTransfers', () => {
     expect(res[0].isTransfer).toBe(true)
     expect(res[1].isTransfer).toBe(false)
     expect(res[2].isTransfer).toBe(false)
+  })
+})
+
+describe('markTransfers and business accounts (review I3)', () => {
+  it('never pairs a business-account row: money from the business is income on the personal side', () => {
+    const bizOut = tx('biz', '2026-09-10', -100000, 'TRANSFER TO PERSONAL')
+    const personalIn = tx('cur', '2026-09-10', 100000, 'TRANSFER FROM BIZ LTD')
+    const res = markTransfers([bizOut, personalIn], accounts)
+    expect(res.map((t) => t.isTransfer)).toEqual([false, false])
+    expect(isSpendingTx(res[1], accounts)).toBe(true)
+  })
+
+  it('still pairs the personal row with another personal account when one matches', () => {
+    const bizOut = tx('biz', '2026-09-10', -100000)
+    const curIn = tx('cur', '2026-09-10', 100000)
+    const cur2Out = tx('cur2', '2026-09-11', -100000)
+    const res = markTransfers([bizOut, curIn, cur2Out], accounts)
+    expect(res.map((t) => t.isTransfer)).toEqual([false, true, true])
   })
 })
 
