@@ -1,7 +1,7 @@
 # Personal Budget & Investing App: Design Spec (MVP v1)
 
 Date: 2026-10-26
-Status: Draft for owner review
+Status: Draft v2 for owner review (v1 approved in principle; gap list items 1-10 and small extras added)
 Owner: Vinod (single user, UK)
 
 ## 1. Purpose and success criteria
@@ -35,12 +35,19 @@ Success looks like:
 ## 3. Scope
 
 ### In v1
-- Five tabs: Home, Import, Budget, Debts, Invest.
+- Five tabs: Home, Import, Budget, Debts & Savings, Invest; plus Settings.
+- First-run setup wizard (accounts, income streams, debts, savings, allowances used, existing holdings, settings).
 - Income streams (net, labelled), editable categories, rules that learn from re-categorisation.
-- CSV import with per-bank column mapping, duplicate detection, own-account transfer detection.
-- Debt tracking with credit limit / original amount.
+- Account kinds: current, credit card, savings, business. Business accounts are excluded from spending and from the investable figure.
+- CSV import with per-bank column mapping, duplicate detection, own-account transfer detection (including card repayments), refunds netted against their category, and undo of a whole import.
+- Debt tracking with credit limit / original amount, and optional interest-free promotion end date.
+- Savings pots with balance and target; the emergency fund is one of them.
+- Annual and irregular bills ("sinking funds") spread over twelve months.
+- Allowance already used this tax year (ISA, pension) and existing investments entered as opening holdings.
 - Investing engine and monthly plan with logging and drift tracking.
+- Custom budget month start day (for example payday on the 25th).
 - Month-end .xlsx export.
+- App lock (passcode), delete-all-data, dark mode.
 - Encrypted backup and restore; PWA install and offline use.
 
 ### Not in v1
@@ -48,13 +55,15 @@ Bank linking (Open Banking), PDF statement parsing, tax or National Insurance mo
 
 ## 4. Screens
 
-**Home.** Month selector. Cards for income received, spent, left to spend, debt remaining, and the **Invest this month** figure with a button to the plan. A short "needs attention" list (uncategorised transactions, backup overdue, new import profile needed).
+**Home.** Month selector. Cards for income received, spent, left to spend, debt remaining, and the **Invest this month** figure with a button to the plan. A short "needs attention" list (uncategorised transactions, backup overdue, new import profile needed). On first run, the setup wizard replaces this screen until the basics are entered. The app asks for the passcode on open when app lock is on.
 
 **Import.** Add account; drop one or more CSVs; if the layout is unknown, a one-time mapping screen (date column and format, description, single amount column or separate debit and credit columns); preview with duplicates and transfers marked; confirm. Import history per account.
 
 **Budget.** Categories with monthly limits, spent so far, and a progress bar. Default categories: Groceries and food, Eating out, Direct debits and bills, Housing, Transport, Clothes, Subscriptions, Health, Entertainment, Family and kids, Gifts, Travel, Cash, Miscellaneous, Fees and interest, Debt payments, Savings and investing, Income, Transfers (excluded). Tap a transaction to re-categorise; the app offers "apply to all similar".
 
-**Debts.** List of debts: name, kind (card, loan, other), current balance, **credit limit / original amount**, APR, minimum payment. Cards show utilisation (balance / limit); loans show percentage paid off. Payoff timeline under the avalanche rule with the monthly overpayment set by the investing engine, and a debt-free date.
+**Debts & Savings.** Debts: name, kind (card, loan, other), current balance, **credit limit / original amount**, APR, minimum payment, and optionally an interest-free promotion (promo APR and end date). Cards show utilisation (balance / limit); loans show percentage paid off. Payoff timeline under the avalanche rule with the monthly overpayment set by the investing engine, and a debt-free date. Savings pots: name, balance, target; one pot is flagged as the emergency fund. Annual bills (sinking funds): name, yearly amount, due month; the app sets aside one-twelfth each month.
+
+**Settings.** Budget month start day, APR threshold, buffer, emergency-fund pot, wrapper order and shares, allowances and amounts used this tax year, platforms, example-fund table, app lock, dark mode, backup and restore, delete all data.
 
 **Invest** (the main feature). Detailed in section 6.
 
@@ -86,21 +95,27 @@ Engines are pure functions (data in, result out). Money is stored as integer pen
 ### 6.1 Investable amount (per month)
 
 ```
-investable = monthly net income (all streams, actual or expected)
-           - average monthly spending (from imported statements, transfers excluded)
+investable = monthly net income (personal accounts; each stream: the lower of expected
+                                 and the trailing three-month average of actual receipts)
+           - average monthly spending (trailing three budget months, transfers and business
+                                       accounts excluded, refunds netted against categories)
+           - sinking-fund set-aside (annual bills / 12)
            - sum of debt minimum payments
-           - extra payments on debts above the APR threshold   (avalanche order)
-           - emergency fund top-up (until target reached)
+           - extra payments on debts above the APR threshold   (avalanche order; a debt
+                                       in an interest-free promotion is treated at its
+                                       promo rate until the promotion ends, then at its
+                                       standard APR)
+           - emergency fund top-up (until the flagged savings pot reaches its target)
            - buffer (default 10% of income)
 ```
-If the result is zero or negative, the plan says so and shows which line is the biggest drain. No negative investing.
+If the result is zero or negative, the plan says so and shows which line is the biggest drain. No negative investing. If fewer than three months of data exist, the engine uses what is available and says so on the screen.
 
 ### 6.2 Wrapper allocation
 
 Wrappers, in a user-editable priority order. Default order and rules:
 
 1. **Pension (SIPP):** default share of investable 25% (editable). The UI states the money is locked until pension age.
-2. **Stocks & Shares ISA:** fills up to the remaining allowance for the tax year, spread across the months left.
+2. **Stocks & Shares ISA:** fills up to the remaining allowance for the tax year (allowance minus the amount already used, entered in Settings or the wizard and increased as you log contributions), spread across the months left. The same applies to the pension allowance: contributions already made this tax year, including through payroll, are entered as "used".
 3. **Lifetime ISA:** off by default; user ticks if eligible; counts inside the ISA allowance (max £4,000 a year).
 4. **General investment account (GIA):** whatever remains.
 
@@ -139,20 +154,24 @@ The owner sets a default platform per wrapper in Settings. Until set, the plan s
 
 ### 6.5 Monthly plan card
 
-Example output: "Invest £X. Pension £a, ISA £b, GIA £c. Within ISA: Growth £g (fund 1 £, fund 2 £), Aggressive £h (fund 3 £, fund 4 £, fund 5 £). Platform: <default>". Each line is a checkbox; ticking logs it to InvestmentLog with the actual amount editable. Drift view compares logged holdings against 70/30 and suggests the next month's rebalancing by directing new money to the underweight bucket first. No selling suggestions in v1.
+Example output: "Invest £X. Pension £a, ISA £b, GIA £c. Within ISA: Growth £g (fund 1 £, fund 2 £), Aggressive £h (fund 3 £, fund 4 £, fund 5 £). Platform: <default>". Each line is a checkbox; ticking logs it to InvestmentLog with the actual amount editable. Drift view compares logged holdings plus the opening holdings entered at setup (fund and current value) against 70/30 and suggests the next month's rebalancing by directing new money to the underweight bucket first. No selling suggestions in v1.
 
 One line on the tab: "Starting rules, not personal advice. Check each fund's key information document and your platform's availability before buying."
 
 ## 7. Data model (IndexedDB, money in pence)
 
-- **Account:** id, name, bank, type, importProfileId.
+- **Account:** id, name, bank, kind (current | creditCard | savings | business), importProfileId.
 - **ImportProfile:** id, bank label, dateFormat, descriptionColumn, amountMode (single | debitCredit), amountColumn or debitColumn/creditColumn, signConvention, headerRows.
-- **Transaction:** id, accountId, date, amountPence, description, categoryId, fingerprint, batchId, isTransfer.
+- **Transaction:** id, accountId, date, amountPence, description, categoryId, fingerprint, batchId, isTransfer, isRefund.
 - **Category:** id, name, monthlyLimitPence, excludedFromSpending.
 - **Rule:** id, matchText, categoryId, source (default | learned).
 - **IncomeStream:** id, label, expectedMonthlyNetPence.
-- **Debt:** id, name, kind (card | loan | other), balancePence, **creditLimitOrOriginalPence**, aprPercent, minimumPaymentPence.
-- **Settings:** aprThresholdPercent (7), emergencyFundTargetPence, bufferPercent (10), wrapperOrder, wrapperShares, allowances by tax year, bucketSplit (70/30), defaultPlatformByWrapper, backupLastAt.
+- **Debt:** id, name, kind (card | loan | other), balancePence, **creditLimitOrOriginalPence**, aprPercent, minimumPaymentPence, promoAprPercent (optional), promoEndsOn (optional).
+- **SavingsPot:** id, name, balancePence, targetPence, isEmergencyFund.
+- **SinkingFund:** id, name, yearlyAmountPence, dueMonth.
+- **OpeningHolding:** id, holdingId, valuePence, asOf, wrapper, platformId.
+- **AllowanceUsed:** taxYear, wrapper, usedPence (increased automatically when contributions are logged).
+- **Settings:** budgetMonthStartDay (1), aprThresholdPercent (7), emergencyFundPotId, bufferPercent (10), wrapperOrder, wrapperShares, allowances by tax year, bucketSplit (70/30), defaultPlatformByWrapper, appLock (off | passcode, stored as a salted hash), theme (system | light | dark), backupLastAt.
 - **Holding (seed table):** id, bucket, weight, fundType, exampleName, ticker, platforms[].
 - **Platform:** id, name, wrappersSupported[], notes, lastChecked.
 - **InvestmentLog:** id, month, wrapper, holdingId, plannedPence, actualPence, platformId.
@@ -160,14 +179,17 @@ One line on the tab: "Starting rules, not personal advice. Check each fund's key
 ## 8. Import details
 
 - **Fingerprint** = account + date + amount + normalised description + occurrence index within the day, so two genuine identical purchases on one day are not merged and overlapping statements do not double-count.
-- **Transfers:** matching amounts leaving one account and arriving in another within three days are marked as transfers and excluded from spending and income.
+- **Transfers:** matching amounts leaving one account and arriving in another within three days are marked as transfers and excluded from spending and income. Credit-card repayments from a current account match against the payment shown on the card statement, so only the card's purchases count as spending. A card statement is therefore expected whenever a card repayment appears; if it is missing, the app lists the repayment under "needs attention" rather than counting it as spending.
+- **Business accounts:** transactions on accounts of kind `business` are stored and exported but excluded from spending, budget and the investable figure. Money moved from a business account to a personal one appears as income on the personal side, assigned to a labelled stream.
+- **Refunds:** a positive amount that matches an earlier purchase's merchant is flagged `isRefund` and reduces that category's spend instead of counting as income. The user can flip the flag.
+- **Undo import:** every import has a batch; one tap removes the whole batch, with a confirmation.
 - **Unknown layout:** shows the mapping screen instead of failing; the profile is saved per account.
 - **Atomic import:** an import is one transaction; any failure rolls it back.
 - Bank export layouts are assumed from general patterns until real samples are available (see section 12).
 
 ## 9. Month-end spreadsheet (.xlsx)
 
-One workbook per month, built in the browser, with sheets: Summary, Transactions (categorised), Budget vs Actual, Income by Stream, Debts (balance, limit/original, utilisation or percent paid, APR, payoff date), Investment Plan (planned and logged). Totals use live Excel formulas where practical, and a test checks that the sheet totals equal the in-app totals.
+One workbook per month, built in the browser, with sheets: Summary, Transactions (categorised), Budget vs Actual, Income by Stream, Debts (balance, limit/original, utilisation or percent paid, APR, payoff date), Savings and Sinking Funds, Investment Plan (planned and logged, with allowances used). Totals use live Excel formulas where practical, and a test checks that the sheet totals equal the in-app totals.
 
 ## 10. Backup and device sync
 
@@ -179,7 +201,10 @@ Export produces an encrypted file (AES-GCM, key from a passphrase via PBKDF2). I
 
 **Tests (Vitest, written before implementation):**
 - `debt`: avalanche ordering, payoff date, utilisation and percent-paid maths, with fixed examples.
-- `invest`: investable amount, wrapper order and caps, 70/30 split rounding (pence must sum exactly), allowance exhaustion and tax-year reset, negative surplus.
+- `invest`: investable amount, wrapper order and caps, 70/30 split rounding (pence must sum exactly), allowance exhaustion and tax-year reset, negative surplus, allowance already used, income smoothing (lower of expected and trailing average), sinking-fund set-aside, emergency-fund pot reaching target, drift including opening holdings.
+- `debt`: interest-free promotion switching to the standard APR on its end date.
+- `import` (additions): card repayment matching, missing card statement flagged, business-account exclusion, refund netting, undo of a batch, custom month boundaries (for example the 25th).
+- App lock: wrong passcode keeps data locked; correct passcode unlocks; delete-all-data empties storage.
 - `import`: synthetic CSVs shaped like typical UK exports (single and split amount columns, various date formats), duplicates, overlapping statements, transfers.
 - `export`: workbook totals equal app totals.
 - `backup`: round-trip, wrong passphrase, tampered file.
@@ -191,6 +216,9 @@ Export produces an encrypted file (AES-GCM, key from a passphrase via PBKDF2). I
 2. **Seed funds:** the example funds in 6.3 and the platform facts in 6.4 should be confirmed by the owner before the first real plan.
 3. **Default platform per wrapper:** to be chosen by the owner in Settings.
 4. **Hosting:** which free static host to use (decided at deploy time).
+5. **GitHub repository:** the owner creates an empty repository (suggested: private, `budget-app`) under their account and gives me the name before the build starts.
+6. **App lock honesty:** a passcode in a web app guards against casual access on an unlocked device, not against a determined attacker with file-level access; the encrypted backup is the strongly protected copy. The settings screen says so in one line.
+7. **Month start day and which accounts are business:** set in the wizard.
 
 ## 13. Skills and connectors needed to build this
 
