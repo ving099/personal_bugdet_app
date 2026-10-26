@@ -1,4 +1,4 @@
-import { isSpendingTx } from '../import/matching'
+import { isSpendingTx, isUnmatchedCardRepayment } from '../import/matching'
 import { INCOME_CATEGORY_ID } from '../seed/categories'
 import type { Account, Category, IncomeStream, Pence, SinkingFund, Transaction } from '../domain/types'
 import { assertStartDay, parseMonth, previousMonths, txsInMonth } from './months'
@@ -11,14 +11,16 @@ type Flow = { kind: 'spend'; pence: Pence } | { kind: 'income'; pence: Pence } |
 const excludedSet = (categories?: Category[]) => new Set((categories ?? []).filter((c) => c.excludedFromSpending).map((c) => c.id))
 
 /**
- * The single rule for what a row means to the budget. Rows that are transfers or on non-spending
- * (business/savings) accounts are ignored entirely. Rows in an excludedFromSpending category are never
+ * The single rule for what a row means to the budget. Rows that are transfers, unmatched card repayments
+ * (listed under "needs attention" instead) or on non-spending (business/savings) accounts are ignored entirely. Rows in an excludedFromSpending category are never
  * spending, and their credits are not income either (a transfer in, money back from a platform), except in
  * the Income category, which is where pay is filed. Outflows and flagged refunds are spend (positive pence
  * for outflows, negative for refunds); other positive rows are income.
  */
 function classify(tx: Transaction, accounts: Account[], excluded: Set<string>): Flow {
   if (!isSpendingTx(tx, accounts)) return null
+  // Paying a card off moves money, it is not spending; the card's own purchases are the spending.
+  if (isUnmatchedCardRepayment(tx, accounts)) return null
   if (tx.categoryId && excluded.has(tx.categoryId)) {
     const pay = tx.categoryId === INCOME_CATEGORY_ID && tx.amountPence > 0 && !tx.isRefund
     return pay ? { kind: 'income', pence: tx.amountPence } : null

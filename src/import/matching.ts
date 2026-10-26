@@ -61,19 +61,25 @@ export function markTransfers(txs: Transaction[], accounts: Account[]): Transact
   return txs.map((t, i) => (matched.has(i) && !t.isTransfer ? { ...t, isTransfer: true } : { ...t }))
 }
 
-/** Outflows from non-card accounts that look like card repayments but found no card-side inflow (not marked as transfers). */
+/**
+ * An outflow from a non-card account that looks like a card repayment but found no card-side inflow (not marked
+ * as a transfer). It is moving money to a card, not spending (spec section 8): it is listed under "needs attention"
+ * and left out of spending until the card statement arrives and the pair is flagged as a transfer.
+ */
+export function isUnmatchedCardRepayment(t: Transaction, accounts: Account[]): boolean {
+  const kind = accounts.find((a) => a.id === t.accountId)?.kind
+  return (
+    kind !== undefined &&
+    kind !== 'creditCard' &&
+    t.amountPence < 0 &&
+    !t.isTransfer &&
+    CARD_REPAYMENT_PATTERN.test(t.description)
+  )
+}
+
+/** Every unmatched card repayment (see isUnmatchedCardRepayment). */
 export function unmatchedCardRepayments(txs: Transaction[], accounts: Account[]): Transaction[] {
-  const kindOf = new Map(accounts.map((a) => [a.id, a.kind]))
-  return txs.filter((t) => {
-    const kind = kindOf.get(t.accountId)
-    return (
-      kind !== undefined &&
-      kind !== 'creditCard' &&
-      t.amountPence < 0 &&
-      !t.isTransfer &&
-      CARD_REPAYMENT_PATTERN.test(t.description)
-    )
-  })
+  return txs.filter((t) => isUnmatchedCardRepayment(t, accounts))
 }
 
 /** True when the row counts toward budget and income analysis: not a transfer, on a current or credit-card account. */

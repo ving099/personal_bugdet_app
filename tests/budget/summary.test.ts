@@ -299,3 +299,28 @@ describe('seeded non-spending categories (review I1)', () => {
     expect(monthSummary({ ...seeded, month: '2026-09', txs }).totalIncomePence).toBe(0)
   })
 })
+
+describe('unmatched card repayments (review I2)', () => {
+  const withCard: Account[] = [...accounts, { id: 'card', name: 'Card', bank: 'B', kind: 'creditCard' }]
+  const b = { startDay: 25, accounts: withCard, categories: seedCategories, streams }
+  const repay = tx('2026-10-05', -25000, { description: 'BARCLAYCARD PAYMENT' })
+  const shop = tx('2026-10-06', -8333, { description: 'TESCO STORES 3333', categoryId: 'groceries-and-food' })
+
+  it('are listed for attention but not counted as spending while the card statement is missing', () => {
+    expect(monthSummary({ ...b, month: '2026-09', txs: [repay, shop] }).totalSpentPence).toBe(8333)
+    expect(trailingSpend({ ...b, asOfMonth: '2026-10', txs: [repay, shop] })).toEqual({ averagePence: 8333, monthsUsed: 1 })
+  })
+
+  it('a month with only an unmatched repayment has no spending data', () => {
+    expect(trailingSpend({ ...b, asOfMonth: '2026-10', txs: [repay] })).toEqual({ averagePence: 0, monthsUsed: 0 })
+  })
+
+  it('stays out of spending once the card statement arrives and the pair is flagged as a transfer', () => {
+    const paired = { ...repay, isTransfer: true }
+    const cardIn = tx('2026-10-07', 25000, { accountId: 'card', description: 'PAYMENT RECEIVED THANK YOU', isTransfer: true })
+    const cardSpend = tx('2026-10-02', -4520, { accountId: 'card', description: 'SHELL', categoryId: 'transport' })
+    const r = monthSummary({ ...b, month: '2026-09', txs: [paired, cardIn, cardSpend, shop] })
+    expect(r.totalSpentPence).toBe(8333 + 4520)
+    expect(r.totalIncomePence).toBe(0)
+  })
+})
