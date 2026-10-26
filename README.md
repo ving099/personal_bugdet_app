@@ -1,32 +1,66 @@
-# React + TypeScript + Vite
+# Budget
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A private budgeting and investing-suggestions app for UK households. It runs in the browser, installs on your phone or Mac like an ordinary app, and keeps everything on your device. There is no server and there are no accounts: nothing you enter is sent anywhere.
 
-Currently, two official plugins are available:
+## What it does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Import** bank and card statements (CSV files). The app guesses the column layout, remembers it per account, spots duplicates and skips transfers between your own accounts.
+- **Categorise** spending: rules place transactions automatically, and on the Budget tab you can pick a category for anything left uncategorised.
+- **Budget** the month against your planned amounts, with debts, savings pots and sinking funds alongside.
+- **Invest** shows what you can afford to invest this month, split across tax wrappers (pension, ISA, optionally Lifetime ISA, and general account) and a list of example funds. You tick lines off as you buy them, and your remaining allowances update.
+- **Month-end spreadsheet** with seven sheets (Summary, Transactions, Budget vs Actual, Income by Stream, Debts, Savings and Sinking Funds, Investment Plan).
 
-## React Compiler
+The investing suggestions are generated from your own numbers by the rules in the app. The Invest tab carries one line: "Starting rules, not personal advice. Check each fund's key information document and your platform's availability before buying."
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Install it
 
-## Expanding the Oxlint configuration
+Open the app's web address once, then install it so it opens like a normal app and works offline.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+- **iPhone:** open it in Safari, tap Share, then Add to Home Screen.
+- **Android:** open it in Chrome, then menu, Install app.
+- **Mac:** in Safari choose File, Add to Dock. In Chrome use the install icon in the address bar.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+Your data lives in the browser storage of the device you install on, so each device has its own copy. Use the backup routine below to move data between devices.
+
+## A month with the app
+
+1. **Import** this month's statements for each account.
+2. **Categorise** anything uncategorised on the Budget tab.
+3. **Check the plan** on Home, Budget and Invest.
+4. **Tick off investments** on the Invest tab as you make them.
+5. **Download the month-end spreadsheet** (Home or Budget) and keep it for your records.
+
+## Backups
+
+In Settings, "Download encrypted backup" asks for a passphrase and saves a single file. Move it to another device by AirDrop, iCloud Drive or any file-sharing you like. To restore, choose the file in Settings and enter its passphrase.
+
+- Restoring replaces all data on that device with the contents of the backup.
+- The app lock (passcode) stays per device and is not changed by a restore. It keeps casual access out; the encrypted backup is the strongly protected copy.
+- Keep the passphrase somewhere safe. It is never stored, and without it the backup cannot be opened by anyone, including you.
+- The app reminds you if it has been over 30 days since your last backup.
+
+## Editing funds, platforms and allowances
+
+All in Settings:
+
+- **Funds:** change the example funds, their buckets and weights.
+- **Platforms:** change which tax wrappers each platform supports, its notes and the "last checked" date, and pick the default platform for each wrapper.
+- **Allowances:** set the ISA, Lifetime ISA and pension allowances for each tax year.
+
+The shipped allowances for 2026/27 are ISA £20,000, Lifetime ISA £4,000 and pension £60,000. The platform facts were checked on 2026-10-26. Rules and platforms change, so treat them as starting points and edit them whenever you learn something new. Example funds are starting points, not recommendations.
+
+## Running it locally
+
+```
+npm install
+npm run dev       # development server
+npm test          # run the tests once
+npm run build     # type-check and production build into dist/
+npm run preview   # serve the production build
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Deploying to GitHub Pages: the workflow in `.github/workflows/deploy.yml` builds with `VITE_BASE=/personal_bugdet_app/` on every push to `main`. In the repository settings set Pages, Source, to GitHub Actions. To build for a different path, set `VITE_BASE` yourself, for example `VITE_BASE=/ npm run build`.
+
+## Data and privacy
+
+Everything is stored in your browser's IndexedDB: accounts, transactions, categories and rules, budgets, debts, savings, holdings, platforms, settings and the investment log. The only network use is downloading the app itself. Spreadsheets and backups are made on your device and saved as files you control. Deleting the app or clearing site data removes the data, so keep a backup.
