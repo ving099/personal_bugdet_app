@@ -71,7 +71,7 @@ describe('Invest: notes about what the figure may miss (part 2)', () => {
       ],
     })
     expect(await screen.findByText(
-      'Your spending may be understated by about £150.00 a month — card repayments with no card statement imported.',
+      '£300.00 of card repayments in the last 3 months have no card statement.',
     )).toBeInTheDocument()
   })
 
@@ -80,7 +80,7 @@ describe('Invest: notes about what the figure may miss (part 2)', () => {
     await setup(db, { txs: [row({ amountPence: -4000, description: 'KLARNA', categoryId: 'debt-payments' })] })
     const list = screen.getByRole('list', { name: 'How we got this number' })
     expect(await within(list).findByText('Debt payments not on your Debts list')).toBeInTheDocument()
-    expect(screen.queryByText(/may be understated/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/have no card statement/)).not.toBeInTheDocument()
   })
 })
 

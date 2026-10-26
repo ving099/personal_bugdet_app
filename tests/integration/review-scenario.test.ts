@@ -155,9 +155,9 @@ describe('review scenario', () => {
     expect(unlisted.input.debtMinimumsPence).toBe(0)
     expect(unlisted.unlistedDebtPence).toBe(15000)
     expect(unlisted.input.spendPence).toBe(view.input.spendPence + 15000)
-    // The unmatched £250 card repayment on 5 Oct sits in the 25 Sep - 24 Oct budget month, inside the window of
-    // three months with data, so Invest warns spending may be understated by about £83.33 a month.
-    expect(view.unmatchedRepaymentPence).toBe(8333)
+    // The unmatched £250 card repayment on 5 Oct sits in the 25 Sep - 24 Oct budget month, inside the window,
+    // so Invest says £250 of card repayments in the last 3 months have no card statement.
+    expect(view.unmatchedRepaymentPence).toBe(25000)
   })
 
   it('refund-heavy history neither makes spending negative nor throws (C1)', async () => {

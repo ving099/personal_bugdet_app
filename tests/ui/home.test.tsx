@@ -142,7 +142,7 @@ describe('Home', () => {
   it('flags debt payments that are not on the Debts list and links to Debts (part 2)', async () => {
     const db = await freshDb()
     const { user, onNavigate } = await setup(db, {
-      txs: [...month, tx({ description: 'KLARNA', amountPence: -4000, categoryId: 'debt-payments' })],
+      txs: [...month, tx({ date: '2026-09-10', description: 'KLARNA', amountPence: -4000, categoryId: 'debt-payments' })],
       streams: [salary],
     })
     const list = await screen.findByRole('list', { name: 'Needs attention' })
@@ -154,7 +154,13 @@ describe('Home', () => {
   it('does not flag debt payments the Debts list minimums cover', async () => {
     const db = await freshDb()
     await setup(db, {
-      txs: [...month, tx({ description: 'KLARNA', amountPence: -2500, categoryId: 'debt-payments' })],
+      txs: [
+        ...month,
+        tx({ date: '2026-09-10', description: 'VISA PAYMENT', amountPence: -2500, categoryId: 'debt-payments' }),
+        // A listed debt paid twice this month is not a false alarm (part 3).
+        tx({ description: 'VISA PAYMENT', amountPence: -2500, categoryId: 'debt-payments' }),
+        tx({ description: 'VISA PAYMENT', amountPence: -2500, categoryId: 'debt-payments' }),
+      ],
       streams: [salary],
       debts: [visa],
     })

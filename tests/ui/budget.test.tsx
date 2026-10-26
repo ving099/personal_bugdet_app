@@ -174,7 +174,7 @@ describe('Budget: categories and progress', () => {
       tx({ amountPence: -15000, categoryId: 'debt-payments', description: 'LOAN REPAYMENT' }),
       tx({ amountPence: -4000, categoryId: 'debt-payments', description: 'KLARNA' }),
     ])
-    expect(await screen.findByText('Debt payments £190.00 — covered by your debts list £150.00')).toBeInTheDocument()
+    expect(await screen.findByText('Debt payments £190.00 — £150.00 of it covered by your Debts list')).toBeInTheDocument()
   })
 
   it('lists Uncategorised first with a count and a hint', async () => {

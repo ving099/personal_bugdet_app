@@ -23,7 +23,7 @@ export default function Invest({ today = todayISO() }: { today?: ISODate }) {
       <Breakdown view={view} />
       {view.unmatchedRepaymentPence > 0 && (
         <p className="item-meta">
-          {`Your spending may be understated by about ${formatGBP(view.unmatchedRepaymentPence)} a month — card repayments with no card statement imported.`}
+          {`${formatGBP(view.unmatchedRepaymentPence)} of card repayments in the last 3 months have no card statement.`}
         </p>
       )}
       {investState(view.investable) === 'invest' && <PlanSection data={data} view={view} />}

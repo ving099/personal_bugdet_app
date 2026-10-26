@@ -22,9 +22,8 @@ export function attentionItems(input: {
   categories: Category[]
   settings: Settings
   today: ISODate
-  /** This month's Debt payments outflow and the minimums on the Debts list; flagged when payments are higher. */
-  debtPaymentsPence?: Pence
-  debtMinimumsPence?: Pence
+  /** Trailing monthly debt payments above the Debts list minimums (the Invest figure's unlistedDebtPence). */
+  unlistedDebtPence?: Pence
 }): AttentionItem[] {
   const { monthTxs, spentByCategory, accounts, categories, settings, today } = input
   const items: AttentionItem[] = []
@@ -51,7 +50,7 @@ export function attentionItems(input: {
     })
   }
 
-  if ((input.debtPaymentsPence ?? 0) > (input.debtMinimumsPence ?? 0)) {
+  if ((input.unlistedDebtPence ?? 0) > 0) {
     items.push({
       id: 'unlisted-debts',
       text: "Some debt payments aren't on your Debts list",

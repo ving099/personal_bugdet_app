@@ -93,7 +93,7 @@ export interface InvestView {
   input: InvestableInput
   /** Part of input.spendPence that is debt payments beyond the listed minimums (see investableInputFor). */
   unlistedDebtPence: Pence
-  /** About how much spending is understated each month by card repayments with no card statement (0 when none). */
+  /** Total card repayments with no card statement in the last three budget months (0 when none). */
   unmatchedRepaymentPence: Pence
   investable: InvestableResult
   wrappers: WrapperAllocation[]

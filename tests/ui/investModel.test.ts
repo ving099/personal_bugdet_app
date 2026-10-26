@@ -401,7 +401,7 @@ describe('debt payments not on the Debts list (part 2, important 1)', () => {
 })
 
 describe('understated spending note (part 2, minor 2)', () => {
-  it('reports the trailing monthly average of unmatched card repayments', () => {
+  it('reports the total of unmatched card repayments in the last three months', () => {
     const d = data({
       txs: [
         tx({ date: '2026-08-10', amountPence: -50000, categoryId: 'groceries-and-food' }),
@@ -409,7 +409,7 @@ describe('understated spending note (part 2, minor 2)', () => {
         tx({ date: '2026-09-05', amountPence: -30000, description: 'BARCLAYCARD PAYMENT' }),
       ],
     })
-    expect(buildInvestView(d, TODAY).unmatchedRepaymentPence).toBe(15000)
+    expect(buildInvestView(d, TODAY).unmatchedRepaymentPence).toBe(30000)
     expect(buildInvestView(data(), TODAY).unmatchedRepaymentPence).toBe(0)
   })
 })

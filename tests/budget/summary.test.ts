@@ -401,14 +401,14 @@ describe('business drawings filed under Transfers (part 2, important 2)', () => 
 })
 
 describe('trailingUnmatchedRepayments (part 2, minor 2)', () => {
-  it('averages unmatched card repayments over the months in the window that have spending or repayments', () => {
+  it('totals unmatched card repayments over the three-month window (part 3)', () => {
     const txs = [
       tx('2026-07-05', -10000, { categoryId: 'groceries-and-food' }),
       tx('2026-08-05', -10000, { categoryId: 'groceries-and-food' }),
       tx('2026-08-06', -30000, { description: 'BARCLAYCARD PAYMENT' }),
       tx('2026-09-06', -30000, { description: 'BARCLAYCARD PAYMENT', isTransfer: true }),
     ]
-    expect(trailingUnmatchedRepayments({ startDay: 1, accounts, categories: seedCategories, asOfMonth: '2026-10', txs })).toBe(15000)
+    expect(trailingUnmatchedRepayments({ startDay: 1, accounts, categories: seedCategories, asOfMonth: '2026-10', txs })).toBe(30000)
     expect(trailingUnmatchedRepayments({ startDay: 1, accounts, categories: seedCategories, asOfMonth: '2026-10', txs: txs.slice(0, 2) })).toBe(0)
   })
 })

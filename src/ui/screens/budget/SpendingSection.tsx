@@ -104,9 +104,11 @@ export default function SpendingSection({
         Debt payments, saving and investing, and transfers are not counted as spending here. Payments for debts on your
         Debts list are covered by their minimums; anything paid above those is taken off what you can invest.
       </p>
-      {(debtPaymentsPence > 0 || debtMinimumsPence > 0) && (
+      {debtPaymentsPence > 0 && (
         <p className="import-hint debt-cover">
-          {`Debt payments ${formatGBP(debtPaymentsPence)} — covered by your debts list ${formatGBP(debtMinimumsPence)}`}
+          {debtPaymentsPence > debtMinimumsPence
+            ? `Debt payments ${formatGBP(debtPaymentsPence)} — ${formatGBP(debtMinimumsPence)} of it covered by your Debts list`
+            : `Debt payments ${formatGBP(debtPaymentsPence)} — covered by your Debts list`}
         </p>
       )}
       {editing && (

@@ -113,8 +113,8 @@ export function trailingDebtPayments(input: {
 }
 
 /**
- * About how much a month's spending is understated by card repayments that found no card statement: their total
- * over the trailing window, divided by the months in the window that have spending or such repayments. 0 when none.
+ * Total of card repayments that found no card statement over the trailing three-month window (as-of month excluded).
+ * A plain total, not a monthly figure, so a short history cannot make it look alarming. 0 when none.
  */
 export function trailingUnmatchedRepayments(input: {
   asOfMonth: string
@@ -125,17 +125,12 @@ export function trailingUnmatchedRepayments(input: {
 }): Pence {
   parseMonth(input.asOfMonth)
   assertStartDay(input.startDay)
-  const excluded = excludedSet(input.categories)
   let total = 0
-  let months = 0
   for (const month of previousMonths(input.asOfMonth, WINDOW)) {
     const rows = txsInMonth(input.txs, month, input.startDay)
-    const repaid = sum(rows.filter((t) => isUnmatchedCardRepayment(t, input.accounts)).map((t) => -t.amountPence))
-    const spent = sum(rows.map((t) => classify(t, input.accounts, excluded)).filter((f) => f?.kind === 'spend').map((f) => f!.pence))
-    if (repaid > 0 || spent > 0) months += 1
-    total += repaid
+    total += sum(rows.filter((t) => isUnmatchedCardRepayment(t, input.accounts)).map((t) => -t.amountPence))
   }
-  return months === 0 ? 0 : Math.round(total / months)
+  return total
 }
 
 /**
