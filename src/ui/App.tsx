@@ -11,6 +11,7 @@ import { panelId, tabId } from './components/tabIds'
 import TabNav, { type TabItem } from './components/Tabs'
 import LockScreen from './LockScreen'
 import { DbProvider } from './DbProvider'
+import Budget from './screens/Budget'
 import Import from './screens/Import'
 import Settings from './screens/Settings'
 import Wizard from './screens/Wizard'
@@ -36,12 +37,7 @@ const SCREENS: Record<TabKey, () => ReactNode> = {
     />
   ),
   import: () => <Import />,
-  budget: () => (
-    <EmptyState
-      title="No budget yet"
-      body="Once you have imported a month of transactions, your spending will be grouped by category here."
-    />
-  ),
+  budget: () => <Budget />,
   debts: () => (
     <EmptyState
       title="No debts or savings added"

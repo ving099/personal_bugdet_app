@@ -2,13 +2,13 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { taxYearOf } from '../../domain/dates'
 import { formatGBP } from '../../domain/money'
-import type { AccountKind, Debt, Holding, Platform, Settings, Wrapper } from '../../domain/types'
+import type { AccountKind, Holding, Platform, Settings, Wrapper } from '../../domain/types'
 import { Button, Checkbox, MoneyInput, NumberInput, RowEditor, Select, TextInput } from '../components/forms'
 import { todayISO } from '../formValues'
 import { useDb } from '../useDb'
 import { validateMonthStartDay, validatePercent } from './settingsValidation'
 import {
-  WIZARD_STEPS, aprOk, buildWrites, emptyDraft, isoDateOk, monthlySetAside, sortHoldings, stepValid,
+  DEBT_KIND_OPTIONS, MONTH_OPTIONS, WIZARD_STEPS, aprOk, buildWrites, emptyDraft, isoDateOk, monthlySetAside, sortHoldings, stepValid,
   type StepIndex, type WizardDraft,
 } from './wizardModel'
 
@@ -18,15 +18,6 @@ const ACCOUNT_KINDS: { value: AccountKind; label: string }[] = [
   { value: 'creditCard', label: 'Credit card' },
   { value: 'business', label: 'Business account' },
 ]
-const DEBT_KINDS: { value: Debt['kind']; label: string }[] = [
-  { value: 'card', label: 'Credit card' },
-  { value: 'loan', label: 'Loan' },
-  { value: 'other', label: 'Other' },
-]
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-].map((label, i) => ({ value: String(i + 1), label }))
 const WRAPPER_LABELS: Record<Wrapper, string> = {
   isa: 'Stocks and shares ISA', lisa: 'Lifetime ISA', pension: 'Pension (SIPP)', gia: 'General investment account',
 }
@@ -143,7 +134,7 @@ function DebtsStep({ draft, setDraft, attempted, newId }: StepProps) {
             <>
               <TextInput label="Debt name" value={x.name} onChange={(name) => upd({ name })}
                 error={attempted && !x.name.trim() ? NAME_ERROR : undefined} />
-              <Select label="Kind" value={x.kind} options={DEBT_KINDS} onChange={(kind) => upd({ kind })} />
+              <Select label="Kind" value={x.kind} options={DEBT_KIND_OPTIONS} onChange={(kind) => upd({ kind })} />
               <MoneyInput label="Balance" required showErrors={attempted} value={x.balance}
                 onChange={(balance) => upd({ balance })} />
               <NumberInput label="APR" suffix="%" value={x.apr} onChange={(apr) => upd({ apr })}
@@ -220,7 +211,7 @@ function SinkingStep({ draft, setDraft, attempted, newId }: StepProps) {
                 error={attempted && !x.name.trim() ? NAME_ERROR : undefined} />
               <MoneyInput label="Yearly amount" required showErrors={attempted} value={x.yearly}
                 onChange={(yearly) => set(replaceAt(draft.sinkingFunds, i, { ...x, yearly }))} />
-              <Select label="Due month" value={x.dueMonth} options={MONTHS}
+              <Select label="Due month" value={x.dueMonth} options={MONTH_OPTIONS}
                 onChange={(dueMonth) => set(replaceAt(draft.sinkingFunds, i, { ...x, dueMonth }))} />
               <p className="set-aside" aria-live="polite">
                 {monthly === undefined ? 'Monthly set-aside: enter a yearly amount' : `Monthly set-aside: ${formatGBP(monthly)}`}

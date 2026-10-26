@@ -84,10 +84,12 @@ const nonNegMoneyOk = (s: string, required: boolean) => {
   return r.ok && r.pence >= 0
 }
 
-export function aprOk(s: string, required: boolean): boolean {
+export const MAX_WIZARD_APR = 1000
+
+export function aprOk(s: string, required: boolean, max = MAX_WIZARD_APR): boolean {
   if (blank(s)) return !required
   const n = parseNumber(s)
-  return n !== undefined && n >= 0 && n <= 1000
+  return n !== undefined && n >= 0 && n <= max
 }
 
 export function isoDateOk(s: string): boolean {
@@ -98,17 +100,22 @@ export function isoDateOk(s: string): boolean {
   return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d
 }
 
-export function debtRowValid(d: DebtDraft): boolean {
+export function debtRowValid(d: DebtDraft, maxApr = MAX_WIZARD_APR): boolean {
   const promo = !blank(d.promoApr) || !blank(d.promoEnds)
   return (
     !blank(d.name) &&
     nonNegMoneyOk(d.balance, true) &&
-    aprOk(d.apr, true) &&
+    aprOk(d.apr, true, maxApr) &&
     nonNegMoneyOk(d.minimum, true) &&
     nonNegMoneyOk(d.limit, false) &&
-    (!promo || (aprOk(d.promoApr, true) && isoDateOk(d.promoEnds)))
+    (!promo || (aprOk(d.promoApr, true, maxApr) && isoDateOk(d.promoEnds)))
   )
 }
+
+export const potRowValid = (p: PotDraft): boolean =>
+  !blank(p.name) && nonNegMoneyOk(p.balance, true) && nonNegMoneyOk(p.target, false)
+
+export const sinkingRowValid = (s: SinkingDraft): boolean => !blank(s.name) && nonNegMoneyOk(s.yearly, true)
 
 export function stepValid(step: StepIndex, d: WizardDraft): boolean {
   switch (step) {
@@ -117,11 +124,11 @@ export function stepValid(step: StepIndex, d: WizardDraft): boolean {
     case 1:
       return d.incomes.every((i) => !blank(i.label) && nonNegMoneyOk(i.amount, true))
     case 2:
-      return d.debts.every(debtRowValid)
+      return d.debts.every((x) => debtRowValid(x))
     case 3:
-      return d.pots.every((p) => !blank(p.name) && nonNegMoneyOk(p.balance, true) && nonNegMoneyOk(p.target, false))
+      return d.pots.every(potRowValid)
     case 4:
-      return d.sinkingFunds.every((s) => !blank(s.name) && nonNegMoneyOk(s.yearly, true))
+      return d.sinkingFunds.every(sinkingRowValid)
     case 5:
       return (['isa', 'lisa', 'pension'] as const).every((w) => nonNegMoneyOk(d.allowanceUsed[w], false))
     case 6:
@@ -139,6 +146,46 @@ export function monthlySetAside(yearly: string): number | undefined {
   const r = parseMoney(yearly)
   return r.ok && r.pence >= 0 ? Math.round(r.pence / 12) : undefined
 }
+
+/** Row builders for one validated draft; the wizard and the Debts & Savings screen share them. */
+export function debtFromDraft(x: DebtDraft): Debt {
+  return {
+    id: x.id,
+    name: x.name.trim(),
+    kind: x.kind,
+    balancePence: pence(x.balance),
+    creditLimitOrOriginalPence: pence(x.limit),
+    aprPercent: Number(parseNumber(x.apr)),
+    minimumPaymentPence: pence(x.minimum),
+    ...(!blank(x.promoApr) ? { promoAprPercent: Number(parseNumber(x.promoApr)), promoEndsOn: x.promoEnds } : {}),
+  }
+}
+
+export function potFromDraft(p: PotDraft): SavingsPot {
+  return {
+    id: p.id,
+    name: p.name.trim(),
+    balancePence: pence(p.balance),
+    targetPence: pence(p.target),
+    isEmergencyFund: p.emergency,
+  }
+}
+
+export function sinkingFromDraft(s: SinkingDraft): SinkingFund {
+  return { id: s.id, name: s.name.trim(), yearlyAmountPence: pence(s.yearly), dueMonth: Number(s.dueMonth) }
+}
+
+export const DEBT_KIND_OPTIONS: { value: Debt['kind']; label: string }[] = [
+  { value: 'card', label: 'Credit card' },
+  { value: 'loan', label: 'Loan' },
+  { value: 'other', label: 'Other' },
+]
+
+export const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+export const MONTH_OPTIONS = MONTH_NAMES.map((label, i) => ({ value: String(i + 1), label }))
 
 export interface WizardWrites {
   accounts: Account[]
@@ -158,29 +205,9 @@ export function buildWrites(d: WizardDraft, ctx: WizardContext): WizardWrites {
   return {
     accounts: d.accounts.map((a) => ({ id: a.id, name: a.name.trim(), bank: a.bank.trim(), kind: a.kind })),
     incomeStreams: d.incomes.map((i) => ({ id: i.id, label: i.label.trim(), expectedMonthlyNetPence: pence(i.amount) })),
-    debts: d.debts.map((x): Debt => ({
-      id: x.id,
-      name: x.name.trim(),
-      kind: x.kind,
-      balancePence: pence(x.balance),
-      creditLimitOrOriginalPence: pence(x.limit),
-      aprPercent: Number(parseNumber(x.apr)),
-      minimumPaymentPence: pence(x.minimum),
-      ...(!blank(x.promoApr) ? { promoAprPercent: Number(parseNumber(x.promoApr)), promoEndsOn: x.promoEnds } : {}),
-    })),
-    savingsPots: d.pots.map((p) => ({
-      id: p.id,
-      name: p.name.trim(),
-      balancePence: pence(p.balance),
-      targetPence: pence(p.target),
-      isEmergencyFund: p.emergency,
-    })),
-    sinkingFunds: d.sinkingFunds.map((s) => ({
-      id: s.id,
-      name: s.name.trim(),
-      yearlyAmountPence: pence(s.yearly),
-      dueMonth: Number(s.dueMonth),
-    })),
+    debts: d.debts.map(debtFromDraft),
+    savingsPots: d.pots.map(potFromDraft),
+    sinkingFunds: d.sinkingFunds.map(sinkingFromDraft),
     allowancesUsed: (['isa', 'lisa', 'pension'] as const)
       .filter((w) => (w !== 'lisa' || d.lisaEnabled) && !blank(d.allowanceUsed[w]))
       .map((w) => ({ taxYear, wrapper: w, usedPence: pence(d.allowanceUsed[w]) })),

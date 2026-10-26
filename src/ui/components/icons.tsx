@@ -68,3 +68,15 @@ export const SettingsIcon = () => (
     <circle cx="9" cy="17" r="2" />
   </Icon>
 )
+
+export const ChevronLeftIcon = () => (
+  <Icon>
+    <path d="m14 6-6 6 6 6" />
+  </Icon>
+)
+
+export const ChevronRightIcon = () => (
+  <Icon>
+    <path d="m10 6 6 6-6 6" />
+  </Icon>
+)
