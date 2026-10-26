@@ -93,6 +93,15 @@ describe('Home', () => {
     expect(within(card).getByRole('button', { name: 'See why' })).toBeInTheDocument()
   })
 
+  it('says Nothing to invest this month when the figure works out at £0', async () => {
+    const db = await freshDb()
+    await setup(db, { txs: month, streams: [salary], debts: [{ ...visa, balancePence: 10000000, aprPercent: 22.9, minimumPaymentPence: 0 }] })
+    const card = await screen.findByRole('region', { name: 'Invest this month' })
+    expect(within(card).getByText('Nothing to invest this month')).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: 'See the plan' })).not.toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'See why' })).toBeInTheDocument()
+  })
+
   it('shows Back up now when a backup is overdue, and it goes to Settings', async () => {
     const db = await freshDb()
     const { user, onNavigate } = await setup(db, { txs: month, streams: [salary], settings: { backupLastAt: '2026-09-01' } })

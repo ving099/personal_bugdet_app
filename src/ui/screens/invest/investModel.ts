@@ -1,10 +1,11 @@
 import { sinkingMonthlyPence, smoothedIncome, trailingSpend } from '../../../budget/summary'
 import { highAprDebts } from '../../../debt/debt'
-import { budgetMonthOf, taxYearOf } from '../../../domain/dates'
+import { budgetMonthOf, taxYearOf, taxYearOfBudgetMonth } from '../../../domain/dates'
 import type {
   Account, AllowanceUsed, Bucket, Category, Debt, Holding, ISODate, IncomeStream, InvestmentLog, OpeningHolding,
   Pence, Platform, SavingsPot, Settings, SinkingFund, Transaction, Wrapper,
 } from '../../../domain/types'
+import { formatGBP } from '../../../domain/money'
 import { driftReport, type DriftReport } from '../../../invest/drift'
 import { computeInvestable, type InvestableInput, type InvestableResult } from '../../../invest/investable'
 import { buildMonthlyPlan, type MonthlyPlan } from '../../../invest/plan'
@@ -60,10 +61,11 @@ export function investableInputFor(data: InvestData, today: ISODate): { input: I
 
 /**
  * Allowance used as it stood before this month's ticked lines, so ticking a line off does not reshuffle the
- * plan it came from. Only rows for `taxYear` are adjusted; never below zero.
+ * plan it came from. Only logs for this budget month AND this tax year are taken back out, and only from
+ * that tax year's rows; never below zero.
  */
 export function planForUsed(used: AllowanceUsed[], log: InvestmentLog[], month: string, taxYear: string): AllowanceUsed[] {
-  const thisMonth = log.filter((l) => l.month === month)
+  const thisMonth = log.filter((l) => l.month === month && l.taxYear === taxYear)
   return used.map((u) => {
     if (u.taxYear !== taxYear) return u
     const logged = sum(thisMonth.filter((l) => l.wrapper === u.wrapper).map((l) => l.actualPence))
@@ -80,8 +82,28 @@ export interface InvestView {
   plan: MonthlyPlan
   /** Portfolio now: opening holdings plus every logged purchase. */
   drift: DriftReport
-  /** This month's ticked lines. */
-  monthLog: InvestmentLog[]
+  /** Portfolio before this month's purchases; this month's split comes from it. */
+  planDrift: DriftReport
+  /** This month's ticked lines for this tax year, keyed `wrapper:holdingId` (matches plan rows). */
+  logged: Map<string, InvestmentLog>
+  /** This month's ticked lines (any tax year) that no plan line on screen shows; listed so they can be undone. */
+  otherLogged: InvestmentLog[]
+  groups: PlanGroup[]
+}
+
+export type InvestState = 'invest' | 'zero' | 'none'
+
+/** 'invest': a plan to show; 'zero': worked out, but nothing left over; 'none': no figure (see reasonText). */
+export function investState(result: InvestableResult): InvestState {
+  if (!result.ok) return 'none'
+  return result.investablePence > 0 ? 'invest' : 'zero'
+}
+
+export const lineKey = (wrapper: Wrapper, holdingId: string) => `${wrapper}:${holdingId}`
+
+/** Fills in the tax year on log rows that were stored without one (old backups). */
+export function withTaxYears(log: InvestmentLog[], startDay: number): InvestmentLog[] {
+  return log.map((l) => (l.taxYear ? l : { ...l, taxYear: taxYearOfBudgetMonth(l.month, startDay) }))
 }
 
 export function buildInvestView(data: InvestData, today: ISODate): InvestView {
@@ -89,22 +111,34 @@ export function buildInvestView(data: InvestData, today: ISODate): InvestView {
   const { input, month } = investableInputFor(data, today)
   const taxYear = taxYearOf(today)
   const investable = computeInvestable(input)
-  const monthLog = data.log.filter((l) => l.month === month)
+  const log = withTaxYears(data.log, settings.budgetMonthStartDay)
   const wrappers = allocateWrappers({
     investablePence: investable.ok ? investable.investablePence : 0,
     today,
     settings,
-    used: planForUsed(data.used, data.log, month, taxYear),
+    used: planForUsed(data.used, log, month, taxYear),
     lisaEnabled: settings.lisaEnabled,
   })
   const base = { opening: data.opening, holdings: data.holdings, bucketSplit: settings.bucketSplit }
   // The split for this month is set from the portfolio before this month's purchases, so it stays put while ticking.
-  const startOfMonth = driftReport({ ...base, log: data.log.filter((l) => l.month < month) })
+  const startOfMonth = driftReport({ ...base, log: log.filter((l) => l.month < month) })
   const plan = buildMonthlyPlan({
     investable, wrappers, holdings: data.holdings, platforms: data.platforms,
     defaultPlatformByWrapper: settings.defaultPlatformByWrapper, settings, drift: startOfMonth,
   })
-  return { month, taxYear, input, investable, wrappers, plan, drift: driftReport({ ...base, log: data.log }), monthLog }
+  const groups = investState(investable) === 'invest' ? planGroups(plan, data.holdings, month, taxYear) : []
+  const shown = new Set(groups.flatMap((g) => g.rows.map((r) => lineKey(r.wrapper, r.holdingId))))
+  const logged = new Map<string, InvestmentLog>()
+  const otherLogged: InvestmentLog[] = []
+  for (const l of log.filter((x) => x.month === month)) {
+    const key = lineKey(l.wrapper, l.holdingId)
+    if (l.taxYear === taxYear && shown.has(key) && !logged.has(key)) logged.set(key, l)
+    else otherLogged.push(l)
+  }
+  return {
+    month, taxYear, input, investable, wrappers, plan, groups, logged, otherLogged,
+    drift: driftReport({ ...base, log }), planDrift: startOfMonth,
+  }
 }
 
 export const WRAPPER_NAMES: Record<Wrapper, string> = {
@@ -143,6 +177,7 @@ export function breakdownLines(view: Pick<InvestView, 'input' | 'investable'>): 
     ...investable.lines.map((l) => ({ label: displayLabel(l.label, input), pence: -l.pence })),
   ]
   if (investable.ok) lines.push({ label: 'Invest this month', pence: investable.investablePence, total: true })
+  else lines.push({ label: 'Shortfall this month', pence: lines.reduce((s, l) => s + l.pence, 0), total: true })
   return lines
 }
 
@@ -160,7 +195,16 @@ export function reasonText(result: InvestableResult): { short: string; long: str
   }
 }
 
-export const logId = (month: string, wrapper: Wrapper, holdingId: string) => `${month}:${wrapper}:${holdingId}`
+/** Deterministic: one log row per tax year, budget month, wrapper and fund. */
+export const logId = (taxYear: string, month: string, wrapper: Wrapper, holdingId: string) =>
+  `${taxYear}:${month}:${wrapper}:${holdingId}`
+
+const CAP_WRAPPER: Record<Wrapper, string> = { pension: 'Pension', isa: 'ISA', lisa: 'LISA', gia: 'GIA' }
+
+/** 'Pension £73.62, ISA £220.88': where this month's money goes, at a glance. */
+export function wrapperSummary(plan: MonthlyPlan): string {
+  return plan.lines.filter((l) => l.pence > 0).map((l) => `${CAP_WRAPPER[l.wrapper]} ${formatGBP(l.pence)}`).join(', ')
+}
 
 export interface PlanRow {
   id: string
@@ -183,7 +227,7 @@ export interface PlanGroup {
 }
 
 /** The plan card, one group per wrapper, one row per fund with money in it. Rows sum to the wrapper amount. */
-export function planGroups(plan: MonthlyPlan, holdings: Holding[], month: string): PlanGroup[] {
+export function planGroups(plan: MonthlyPlan, holdings: Holding[], month: string, taxYear: string): PlanGroup[] {
   return plan.lines.map((line) => {
     const rows: PlanRow[] = []
     const unallocated: PlanGroup['unallocated'] = []
@@ -195,7 +239,7 @@ export function planGroups(plan: MonthlyPlan, holdings: Holding[], month: string
         continue
       }
       rows.push({
-        id: logId(month, line.wrapper, h.id), wrapper: line.wrapper, holdingId: h.id, bucket: part.bucket,
+        id: logId(taxYear, month, line.wrapper, h.id), wrapper: line.wrapper, holdingId: h.id, bucket: part.bucket,
         name: h.exampleName, ticker: h.ticker, plannedPence: part.pence,
       })
     }

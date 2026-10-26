@@ -3,7 +3,9 @@ import { todayISO } from '../formValues'
 import Breakdown from './invest/Breakdown'
 import DriftView from './invest/DriftView'
 import InvestHero from './invest/InvestHero'
+import LoggedSection from './invest/LoggedSection'
 import { useInvestPlan } from './invest/investDb'
+import { investState } from './invest/investModel'
 import PlanSection from './invest/PlanSection'
 
 /** The one line the spec requires on this tab (section 6.5). Shown exactly once. */
@@ -18,7 +20,8 @@ export default function Invest({ today = todayISO() }: { today?: ISODate }) {
     <div className="invest">
       <InvestHero view={view} />
       <Breakdown view={view} />
-      {view.investable.ok && <PlanSection data={data} view={view} />}
+      {investState(view.investable) === 'invest' && <PlanSection data={data} view={view} />}
+      <LoggedSection view={view} holdings={data.holdings} />
       <DriftView view={view} bucketSplit={data.settings.bucketSplit} />
       <p className="disclaimer">{DISCLAIMER}</p>
     </div>

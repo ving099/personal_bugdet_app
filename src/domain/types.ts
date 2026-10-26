@@ -158,6 +158,8 @@ export interface InvestmentLog {
   id: string
   /** 'YYYY-MM' budget month */
   month: string
+  /** Tax year the contribution counts against, e.g. '2026/27'. */
+  taxYear: string
   wrapper: Wrapper
   holdingId: string
   plannedPence: Pence

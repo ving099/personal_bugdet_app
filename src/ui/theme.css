@@ -1683,33 +1683,38 @@ input {
 
 .plan-line {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 4px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 8px;
 }
 
-.plan-line .check-box {
-  grid-row: 1 / span 2;
-  align-self: start;
+/* The label holds the box: the whole 48px cell around it toggles the line. */
+.plan-label {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  min-height: 48px;
+  cursor: pointer;
+}
+
+.plan-text {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0 10px;
 }
 
 .plan-fund {
-  padding-top: 12px;
   font-weight: 700;
-  cursor: pointer;
   overflow-wrap: anywhere;
 }
 
 .plan-amount {
   padding-top: 12px;
-  align-self: start;
   font-weight: 700;
   text-align: right;
 }
 
 .plan-ticker {
-  grid-column: 2 / -1;
-  padding-bottom: 10px;
   color: var(--ink-muted);
   font-size: var(--fs-s);
 }
@@ -1780,4 +1785,10 @@ input {
   flex: 1 1 240px;
   margin: 0;
   max-width: 60ch;
+}
+
+.invest-where {
+  margin: 0 0 4px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }

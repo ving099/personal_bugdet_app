@@ -8,7 +8,7 @@ const open = (holdingId: string, valuePence: number): OpeningHolding => ({
   id: `o-${holdingId}`, holdingId, valuePence, asOf: '2026-10-01', wrapper: 'isa', platformId: 'trading212',
 })
 const log = (holdingId: string, actualPence: number): InvestmentLog => ({
-  id: `l-${holdingId}-${actualPence}`, month: '2026-10', wrapper: 'isa', holdingId, plannedPence: actualPence,
+  id: `l-${holdingId}-${actualPence}`, month: '2026-10', taxYear: '2026/27', wrapper: 'isa', holdingId, plannedPence: actualPence,
   actualPence, platformId: 'trading212',
 })
 const run = (opening: OpeningHolding[], logs: InvestmentLog[] = []) =>

@@ -10,19 +10,22 @@ interface Props {
   row: PlanRow
   logged?: InvestmentLog
   month: string
+  /** Tax year a new tick counts against. */
   taxYear: string
   platformId: string
+  /** Added to the accessible names, e.g. ', logged for 2026/27'. */
+  nameSuffix?: string
 }
 
 /** One fund line: a checkbox that logs it, and once logged, the amount actually put in. */
-export default function PlanRowItem({ row, logged, month, taxYear, platformId }: Props) {
+export default function PlanRowItem({ row, logged, month, taxYear, platformId, nameSuffix = '' }: Props) {
   const db = useDb()
   const id = useId()
   const busy = useRef(false)
   const [error, setError] = useState('')
   const [amount, setAmount] = useState<string | null>(null)
   const [amountError, setAmountError] = useState('')
-  const where = `${row.name} in the ${SHORT_WRAPPER[row.wrapper]}`
+  const where = `${row.name} in the ${SHORT_WRAPPER[row.wrapper]}${nameSuffix}`
 
   async function toggle(on: boolean) {
     // A second click while the first write is running is ignored; the write itself is idempotent too.
@@ -31,7 +34,7 @@ export default function PlanRowItem({ row, logged, month, taxYear, platformId }:
     setError('')
     try {
       if (on) await logPlanLine(db, { row, month, taxYear, actualPence: row.plannedPence, platformId })
-      else await unlogPlanLine(db, row.id, taxYear)
+      else if (logged) await unlogPlanLine(db, logged.id)
       setAmount(null)
     } catch {
       setError(on ? "Couldn't log that. Nothing was changed." : "Couldn't undo that. Nothing was changed.")
@@ -50,7 +53,7 @@ export default function PlanRowItem({ row, logged, month, taxYear, platformId }:
     setAmountError('')
     setError('')
     try {
-      await setLoggedAmount(db, row.id, taxYear, parsed.pence)
+      await setLoggedAmount(db, logged.id, parsed.pence)
       setAmount(null)
     } catch {
       setError("Couldn't save the amount. Nothing was changed.")
@@ -60,11 +63,16 @@ export default function PlanRowItem({ row, logged, month, taxYear, platformId }:
   return (
     <li className="plan-row">
       <div className="plan-line">
-        <input id={id} className="check-box" type="checkbox" checked={!!logged} aria-label={`Bought ${where}`}
-          onChange={(e) => void toggle(e.target.checked)} />
-        <label className="plan-fund" htmlFor={id}>{row.name}</label>
+        {/* The label wraps the box, so its whole 48px cell (not just the 24px box) toggles the line. */}
+        <label className="plan-label">
+          <input className="check-box" type="checkbox" checked={!!logged} aria-label={`Bought ${where}`}
+            onChange={(e) => void toggle(e.target.checked)} />
+          <span className="plan-text">
+            <span className="plan-fund">{row.name}</span>
+            {row.ticker && <span className="plan-ticker">{row.ticker}</span>}
+          </span>
+        </label>
         <span className="plan-amount"><Money pence={row.plannedPence} /></span>
-        <span className="plan-ticker">{row.ticker}</span>
       </div>
       {logged && (
         <div className="plan-actual">
@@ -75,6 +83,12 @@ export default function PlanRowItem({ row, logged, month, taxYear, platformId }:
             aria-describedby={amountError ? `${id}-amount-error` : undefined}
             value={amount ?? penceToInput(logged.actualPence)}
             onChange={(e) => setAmount(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void saveAmount()
+              }
+            }}
             onBlur={() => void saveAmount()} />
           {amountError && <p className="field-error" id={`${id}-amount-error`}>{amountError}</p>}
         </div>

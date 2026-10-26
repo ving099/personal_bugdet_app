@@ -30,8 +30,8 @@ const debts: Debt[] = [
 const savings: SavingsPot[] = [{ id: 'p1', name: 'Rainy', balancePence: 150000, targetPence: 300000, isEmergencyFund: true }]
 const sinking: SinkingFund[] = [{ id: 'f1', name: 'Car tax', yearlyAmountPence: 120000, dueMonth: 3 }]
 const log: InvestmentLog[] = [
-  { id: 'l1', month: '2026-10', wrapper: 'isa', holdingId: 'h1', plannedPence: 10000, actualPence: 9000, platformId: 'p' },
-  { id: 'l2', month: '2026-09', wrapper: 'isa', holdingId: 'h1', plannedPence: 1, actualPence: 1, platformId: 'p' },
+  { id: 'l1', month: '2026-10', taxYear: '2026/27', wrapper: 'isa', holdingId: 'h1', plannedPence: 10000, actualPence: 9000, platformId: 'p' },
+  { id: 'l2', month: '2026-09', taxYear: '2026/27', wrapper: 'isa', holdingId: 'h1', plannedPence: 1, actualPence: 1, platformId: 'p' },
 ]
 const okPlan: MonthlyPlan = {
   ok: true, totalPence: 10000, extraDebtPence: 500, emergencyTopUpPence: 700,

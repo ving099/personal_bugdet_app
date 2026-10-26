@@ -62,6 +62,7 @@ describe('Invest: the plan', () => {
     // £3,000 income, 10% buffer, nothing else: £2,700 to invest.
     const hero = await screen.findByRole('region', { name: 'Invest this month' })
     expect(within(hero).getByText('£2,700.00')).toBeInTheDocument()
+    expect(within(hero).getByText('Pension £675.00, ISA £2,025.00')).toBeInTheDocument()
     const amounts = [...document.querySelectorAll('.plan-row .plan-amount')].map((e) => poundsToPence(e.textContent ?? ''))
     expect(amounts.length).toBeGreaterThan(0)
     expect(amounts.reduce((a, b) => a + b, 0)).toBe(270000)
@@ -97,15 +98,17 @@ describe('Invest: the plan', () => {
     await setup(db)
     const imgs = await screen.findAllByRole('img', { name: /Growth 70%, aggressive 30%/ })
     expect(imgs.length).toBeGreaterThan(0)
-    expect(screen.getByText('No holdings recorded yet — using your target split.')).toBeInTheDocument()
+    expect(screen.getByText("Before this month's purchases: No holdings recorded yet — using your target split.")).toBeInTheDocument()
   })
 
   it('leans new money towards an underweight bucket, capped by the engine', async () => {
     const db = await freshDb()
     await db.openingHoldings.put({ id: 'o', holdingId: 'aggressive-nasdaq', valuePence: 1000000, asOf: TODAY, wrapper: 'isa', platformId: 'trading212' })
     await setup(db)
-    expect(await screen.findByText(/Growth is 0% of your portfolio vs a 70% target/)).toBeInTheDocument()
-    expect(screen.getByText("This month's new money: 80% growth, 20% aggressive.")).toBeInTheDocument()
+    expect(await screen.findByText(/^Before this month's purchases: Growth is 0% of your portfolio vs a 70% target/)).toBeInTheDocument()
+    expect(screen.getByText("So this month's new money: 80% growth, 20% aggressive.")).toBeInTheDocument()
+    // Nothing bought this month yet, so the "now" note would repeat the one above and is left out.
+    expect(screen.queryByText(/^Now:/)).not.toBeInTheDocument()
   })
 
   it('shows the platform warning when a US-only platform is chosen for UCITS funds', async () => {
@@ -134,8 +137,8 @@ describe('Invest: ticking lines off', () => {
     const user = await setup(db)
     await user.click(await screen.findByRole('checkbox', { name: ISA_GLOBAL }))
     // ISA £2,025: growth 70% = £1,417.50, two-thirds of that to the global fund = £945.00.
-    await waitFor(async () => expect(await db.investmentLog.get('2026-10:isa:growth-global')).toBeDefined())
-    const log = await db.investmentLog.get('2026-10:isa:growth-global')
+    await waitFor(async () => expect(await db.investmentLog.get('2026/27:2026-10:isa:growth-global')).toBeDefined())
+    const log = await db.investmentLog.get('2026/27:2026-10:isa:growth-global')
     expect(log).toMatchObject({ month: '2026-10', wrapper: 'isa', holdingId: 'growth-global', plannedPence: 94500, actualPence: 94500 })
     expect((await db.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBe(94500)
     expect(await screen.findByRole('checkbox', { name: ISA_GLOBAL })).toBeChecked()
@@ -165,7 +168,7 @@ describe('Invest: ticking lines off', () => {
     await user.clear(input)
     await user.type(input, '900')
     await user.tab()
-    await waitFor(async () => expect((await db.investmentLog.get('2026-10:isa:growth-global'))?.actualPence).toBe(90000))
+    await waitFor(async () => expect((await db.investmentLog.get('2026/27:2026-10:isa:growth-global'))?.actualPence).toBe(90000))
     expect((await db.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBe(90000)
   })
 
@@ -174,7 +177,7 @@ describe('Invest: ticking lines off', () => {
     await db.allowancesUsed.put({ taxYear: '2026/27', wrapper: 'isa', usedPence: 2000000 })
     const user = await setup(db)
     await user.click(await screen.findByRole('checkbox', { name: 'Bought Vanguard FTSE All-World UCITS ETF in the GIA' }))
-    await waitFor(async () => expect(await db.investmentLog.get('2026-10:gia:growth-global')).toBeDefined())
+    await waitFor(async () => expect(await db.investmentLog.get('2026/27:2026-10:gia:growth-global')).toBeDefined())
     expect(await db.allowancesUsed.get(['2026/27', 'gia'])).toBeUndefined()
   })
 
@@ -188,7 +191,7 @@ describe('Invest: ticking lines off', () => {
     expect(used).toBe(rows * 94500)
     expect(rows).toBeLessThanOrEqual(1)
 
-    const row = { id: '2026-10:isa:growth-us', wrapper: 'isa' as const, holdingId: 'growth-us', bucket: 'growth' as const, name: 'x', ticker: 'x', plannedPence: 100 }
+    const row = { id: '2026/27:2026-10:isa:growth-us', wrapper: 'isa' as const, holdingId: 'growth-us', bucket: 'growth' as const, name: 'x', ticker: 'x', plannedPence: 100 }
     const line = { row, month: '2026-10', taxYear: '2026/27', actualPence: 100, platformId: 'choose' }
     const results = await Promise.all([logPlanLine(db, line), logPlanLine(db, line)])
     expect(results.filter(Boolean)).toHaveLength(1)
@@ -205,7 +208,118 @@ describe('Invest: ticking lines off', () => {
   })
 })
 
+describe('Invest: plan stability, tax years and logged lines', () => {
+  it('keeps the plan on screen steady after ticking when ISA room is nearly used up', async () => {
+    const db = await freshDb()
+    // £1,000 of ISA room left over 6 months caps the ISA at £166.66 a month.
+    await db.allowancesUsed.put({ taxYear: '2026/27', wrapper: 'isa', usedPence: 1900000 })
+    const user = await setup(db)
+    const isaHeading = () => screen.getByRole('heading', { name: /Stocks and shares ISA/ })
+    expect(isaHeading()).toHaveTextContent('£166.66')
+    await user.click(await screen.findByRole('checkbox', { name: ISA_GLOBAL }))
+    await waitFor(async () => expect((await db.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBeGreaterThan(1900000))
+    expect(await screen.findByRole('checkbox', { name: ISA_GLOBAL })).toBeChecked()
+    expect(isaHeading()).toHaveTextContent('£166.66')
+    expect(screen.getByRole('heading', { name: /General investment account/ })).toHaveTextContent('£1,858.34')
+  })
+
+  it('a line ticked on 3 April 2027 does not touch the 2027/28 plan, and each year is undone on its own', async () => {
+    const db = await freshDb()
+    await db.settings.update('main', { allowances: { '2026/27': { isa: 2000000, pension: 6000000 }, '2027/28': { isa: 2000000, pension: 6000000 } } })
+    await db.incomeStreams.put(salary)
+    const user = userEvent.setup()
+    const PENSION = 'Bought Vanguard FTSE All-World UCITS ETF in the pension'
+    const show = (today: string) => render(<DbProvider db={db}><Invest today={today} /></DbProvider>)
+    const first = show('2027-04-03')
+    await user.click(await screen.findByRole('checkbox', { name: PENSION }))
+    const oldId = '2026/27:2027-04:pension:growth-global'
+    await waitFor(async () => expect(await db.investmentLog.get(oldId)).toMatchObject({ taxYear: '2026/27' }))
+    const oldUsed = (await db.allowancesUsed.get(['2026/27', 'pension']))!.usedPence
+    expect(oldUsed).toBeGreaterThan(0)
+    first.unmount()
+
+    show('2027-04-07')
+    const box = await screen.findByRole('checkbox', { name: PENSION })
+    expect(box).not.toBeChecked()
+    const logged = screen.getByRole('region', { name: 'Logged this month' })
+    expect(within(logged).getByRole('checkbox', { name: `${PENSION}, logged for 2026/27` })).toBeChecked()
+
+    await user.click(box)
+    const newId = '2027/28:2027-04:pension:growth-global'
+    await waitFor(async () => expect(await db.investmentLog.get(newId)).toMatchObject({ taxYear: '2027/28' }))
+    const newUsed = (await db.allowancesUsed.get(['2027/28', 'pension']))!.usedPence
+    expect(newUsed).toBeGreaterThan(0)
+    expect((await db.allowancesUsed.get(['2026/27', 'pension']))!.usedPence).toBe(oldUsed)
+
+    await user.click(within(logged).getByRole('checkbox', { name: `${PENSION}, logged for 2026/27` }))
+    await waitFor(async () => expect(await db.investmentLog.get(oldId)).toBeUndefined())
+    expect((await db.allowancesUsed.get(['2026/27', 'pension']))!.usedPence).toBe(0)
+    expect((await db.allowancesUsed.get(['2027/28', 'pension']))!.usedPence).toBe(newUsed)
+    expect(await db.investmentLog.get(newId)).toBeDefined()
+  })
+
+  it('keeps a logged line undoable when there is no longer anything to invest', async () => {
+    const db = await freshDb()
+    await db.allowancesUsed.put({ taxYear: '2026/27', wrapper: 'isa', usedPence: 5000 })
+    const user = await setup(db)
+    await user.click(await screen.findByRole('checkbox', { name: ISA_GLOBAL }))
+    await waitFor(async () => expect((await db.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBe(99500))
+    await db.incomeStreams.clear()
+    const logged = await screen.findByRole('region', { name: 'Logged this month' })
+    expect(screen.queryByRole('heading', { name: 'Your plan' })).not.toBeInTheDocument()
+    const name = `${ISA_GLOBAL}, logged for 2026/27`
+    expect(within(logged).getByLabelText(`Amount put in, Vanguard FTSE All-World UCITS ETF in the ISA, logged for 2026/27`)).toHaveValue('945.00')
+    await user.click(within(logged).getByRole('checkbox', { name }))
+    await waitFor(async () => expect(await db.investmentLog.count()).toBe(0))
+    expect((await db.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBe(5000)
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Logged this month' })).not.toBeInTheDocument())
+  })
+
+  it('keeps a logged line undoable after its fund is removed', async () => {
+    const db = await freshDb()
+    const user = await setup(db)
+    await user.click(await screen.findByRole('checkbox', { name: ISA_GLOBAL }))
+    await waitFor(async () => expect((await db.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBe(94500))
+    await db.holdings.delete('growth-global')
+    const logged = await screen.findByRole('region', { name: 'Logged this month' })
+    const box = within(logged).getByRole('checkbox', { name: 'Bought A fund no longer in your list (growth-global) in the ISA, logged for 2026/27' })
+    await user.click(box)
+    await waitFor(async () => expect(await db.investmentLog.count()).toBe(0))
+    expect((await db.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBe(0)
+  })
+
+  it('saves the amount put in on Enter', async () => {
+    const db = await freshDb()
+    const user = await setup(db)
+    await user.click(await screen.findByRole('checkbox', { name: ISA_GLOBAL }))
+    const input = await screen.findByLabelText('Amount put in, Vanguard FTSE All-World UCITS ETF in the ISA')
+    await user.clear(input)
+    await user.type(input, '800{Enter}')
+    await waitFor(async () => expect((await db.investmentLog.get('2026/27:2026-10:isa:growth-global'))?.actualPence).toBe(80000))
+    expect((await db.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBe(80000)
+    expect(input).toHaveFocus()
+  })
+
+  it('clicking the label beside the box ticks the line', async () => {
+    const db = await freshDb()
+    const user = await setup(db)
+    await user.click(screen.getAllByText('Vanguard FTSE All-World UCITS ETF')[1])
+    await waitFor(async () => expect(await db.investmentLog.count()).toBe(1))
+  })
+})
+
 describe('Invest: nothing to invest', () => {
+  it('with a worked-out £0 shows a short state, not an empty plan', async () => {
+    const db = await freshDb()
+    await setup(db, { debts: [{ id: 'd', name: 'Visa', kind: 'card', balancePence: 10000000, creditLimitOrOriginalPence: 10000000, aprPercent: 22.9, minimumPaymentPence: 0 }] })
+    const hero = await screen.findByRole('region', { name: 'Invest this month' })
+    expect(within(hero).getByText('Nothing to invest this month')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Your plan' })).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+    expect(screen.getAllByText(DISCLAIMER)).toHaveLength(1)
+  })
+
+
   it('with no income shows the no-income reason and no plan', async () => {
     const db = await freshDb()
     await setup(db, { streams: [] })
@@ -223,6 +337,8 @@ describe('Invest: nothing to invest', () => {
     })
     expect(await screen.findByText(/Nothing is left to invest this month/)).toBeInTheDocument()
     expect(screen.getByText('Biggest cost: Spending (3-month average), £1,500.00')).toBeInTheDocument()
+    const list = screen.getByRole('list', { name: 'How we got this number' })
+    expect(within(list).getByText('Shortfall this month').closest('li')).toHaveTextContent('-£600.00')
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
     expect(screen.getAllByText(DISCLAIMER)).toHaveLength(1)
   })

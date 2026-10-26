@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import { taxYearOfBudgetMonth } from '../domain/dates'
 import type {
   Account, AllowanceUsed, Category, Debt, Holding, ImportProfile, IncomeStream,
   InvestmentLog, OpeningHolding, Platform, Rule, SavingsPot, Settings, SinkingFund, Transaction,
@@ -39,6 +40,14 @@ export class BudgetDB extends Dexie {
       holdings: 'id',
       platforms: 'id',
       investmentLog: 'id, month',
+    })
+    // v2: log rows carry the tax year they count against. Older rows get the tax year their budget month starts in.
+    this.version(2).stores({}).upgrade(async (tx) => {
+      const settings = await tx.table<Settings, string>('settings').get('main')
+      const startDay = settings?.budgetMonthStartDay ?? 1
+      await tx.table<InvestmentLog, string>('investmentLog').toCollection().modify((row) => {
+        if (!row.taxYear) row.taxYear = taxYearOfBudgetMonth(row.month, startDay)
+      })
     })
   }
 }

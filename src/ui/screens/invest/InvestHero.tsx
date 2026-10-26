@@ -2,7 +2,7 @@ import Card from '../../components/Card'
 import Money from '../../components/Money'
 import { formatGBP } from '../../../domain/money'
 import { monthLabel } from '../budget/budgetModel'
-import { displayLabel, reasonText, type InvestView } from './investModel'
+import { displayLabel, investState, reasonText, wrapperSummary, type InvestView } from './investModel'
 
 /** The figure itself, or why there is none. The only raised card on the tab. */
 export default function InvestHero({ view }: { view: InvestView }) {
@@ -12,10 +12,17 @@ export default function InvestHero({ view }: { view: InvestView }) {
       <h2 className="invest-hero-heading" id="invest-hero-heading">Invest this month</h2>
       {investable.ok ? (
         <>
-          <p className="invest-figure">
-            <Money pence={investable.investablePence} size="hero" />
-          </p>
-          <p className="item-meta">For {monthLabel(view.month)}, after bills, debts and a safety buffer.</p>
+          {investState(investable) === 'invest' ? (
+            <>
+              <p className="invest-figure">
+                <Money pence={investable.investablePence} size="hero" />
+              </p>
+              <p className="invest-where">{wrapperSummary(view.plan)}</p>
+              <p className="item-meta">For {monthLabel(view.month)}, after bills, debts and a safety buffer.</p>
+            </>
+          ) : (
+            <p className="invest-none">Nothing to invest this month</p>
+          )}
           {investable.notes.length > 0 && (
             <ul className="note-list">
               {investable.notes.map((n) => <li key={n}>{n}</li>)}

@@ -44,3 +44,8 @@ export function monthsLeftInTaxYear(date: ISODate): number {
   // months April..March: April->12 ... March->1
   return ((3 - m + 12) % 12) + 1
 }
+
+/** Tax year of the day a budget month starts on. Used for log rows that predate their stored tax year. */
+export function taxYearOfBudgetMonth(month: string, startDay: number): string {
+  return taxYearOf(budgetMonthRange(month, startDay).from)
+}

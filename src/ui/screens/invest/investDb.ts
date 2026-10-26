@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
-import type { ISODate, Pence, Wrapper } from '../../../domain/types'
+import { taxYearOfBudgetMonth } from '../../../domain/dates'
+import type { ISODate, InvestmentLog, Pence, Wrapper } from '../../../domain/types'
 import type { BudgetDB } from '../../../storage/db'
 import { useDb } from '../../useDb'
 import { ALLOWANCE_WRAPPERS, buildInvestView, type InvestData, type InvestView, type PlanRow } from './investModel'
@@ -43,8 +44,9 @@ async function addUsed(db: BudgetDB, taxYear: string, wrapper: Wrapper, delta: P
 }
 
 /**
- * Logs one plan line and raises the wrapper's allowance used, in one transaction. Logging the same line
- * twice changes nothing (the id is month + wrapper + fund). Returns false when it was already logged.
+ * Logs one plan line for `taxYear` and raises that year's allowance used, in one transaction. Logging the same
+ * line twice changes nothing: the id is tax year + month + wrapper + fund, and an existing row for the same line
+ * (even one stored under an older id) also counts. Returns false when it was already logged.
  */
 export async function logPlanLine(
   db: BudgetDB,
@@ -53,33 +55,43 @@ export async function logPlanLine(
   const { row, month, taxYear, actualPence, platformId } = line
   return db.transaction('rw', db.investmentLog, db.allowancesUsed, async () => {
     if (await db.investmentLog.get(row.id)) return false
+    const same = await db.investmentLog.where('month').equals(month)
+      .filter((l) => l.taxYear === taxYear && l.wrapper === row.wrapper && l.holdingId === row.holdingId).first()
+    if (same) return false
     await db.investmentLog.add({
-      id: row.id, month, wrapper: row.wrapper, holdingId: row.holdingId, plannedPence: row.plannedPence, actualPence, platformId,
+      id: row.id, month, taxYear, wrapper: row.wrapper, holdingId: row.holdingId, plannedPence: row.plannedPence, actualPence, platformId,
     })
     await addUsed(db, taxYear, row.wrapper, actualPence)
     return true
   })
 }
 
-/** Removes a logged line and takes its amount back off allowance used (never below zero), in one transaction. */
-export async function unlogPlanLine(db: BudgetDB, id: string, taxYear: string): Promise<boolean> {
-  return db.transaction('rw', db.investmentLog, db.allowancesUsed, async () => {
+/** The tax year a stored row counts against (rows restored from old backups may lack it). */
+async function rowTaxYear(db: BudgetDB, row: InvestmentLog): Promise<string> {
+  if (row.taxYear) return row.taxYear
+  const startDay = (await db.settings.get('main'))?.budgetMonthStartDay ?? 1
+  return taxYearOfBudgetMonth(row.month, startDay)
+}
+
+/** Removes a logged line and takes its amount off ITS OWN tax year's allowance used (never below zero). One transaction. */
+export async function unlogPlanLine(db: BudgetDB, id: string): Promise<boolean> {
+  return db.transaction('rw', db.investmentLog, db.allowancesUsed, db.settings, async () => {
     const row = await db.investmentLog.get(id)
     if (!row) return false
     await db.investmentLog.delete(id)
-    await addUsed(db, taxYear, row.wrapper, -row.actualPence)
+    await addUsed(db, await rowTaxYear(db, row), row.wrapper, -row.actualPence)
     return true
   })
 }
 
-/** Changes the amount on a logged line; allowance used moves by the difference. One transaction. */
-export async function setLoggedAmount(db: BudgetDB, id: string, taxYear: string, actualPence: Pence): Promise<void> {
-  await db.transaction('rw', db.investmentLog, db.allowancesUsed, async () => {
+/** Changes the amount on a logged line; its own tax year's allowance used moves by the difference. One transaction. */
+export async function setLoggedAmount(db: BudgetDB, id: string, actualPence: Pence): Promise<void> {
+  await db.transaction('rw', db.investmentLog, db.allowancesUsed, db.settings, async () => {
     const row = await db.investmentLog.get(id)
     if (!row) throw new Error('That line is no longer logged.')
     if (row.actualPence === actualPence) return
     await db.investmentLog.update(id, { actualPence })
-    await addUsed(db, taxYear, row.wrapper, actualPence - row.actualPence)
+    await addUsed(db, await rowTaxYear(db, row), row.wrapper, actualPence - row.actualPence)
   })
 }
 

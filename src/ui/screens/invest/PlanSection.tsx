@@ -1,19 +1,18 @@
 import { useState } from 'react'
-import type { Bucket, InvestmentLog, Platform, Wrapper } from '../../../domain/types'
+import type { Bucket, Platform, Wrapper } from '../../../domain/types'
 import Money from '../../components/Money'
 import SplitBar from '../../components/SplitBar'
 import { Select } from '../../components/forms'
 import { useDb } from '../../useDb'
 import { choosePlatform } from './investDb'
-import { planGroups, SHORT_WRAPPER, WRAPPER_NAMES, type InvestData, type InvestView, type PlanGroup } from './investModel'
+import { lineKey, SHORT_WRAPPER, WRAPPER_NAMES, type InvestData, type InvestView, type PlanGroup } from './investModel'
 import PlanRowItem from './PlanRowItem'
 
 const BUCKET_NAMES: Record<Bucket, string> = { growth: 'Growth', aggressive: 'Aggressive' }
 const CHOOSE = ''
 
 export default function PlanSection({ data, view }: { data: InvestData; view: InvestView }) {
-  const { plan } = view
-  const groups = planGroups(plan, data.holdings, view.month)
+  const { plan, groups } = view
   const { growth: g, aggressive: a } = data.settings.bucketSplit
   const target = g + a > 0 ? (g / (g + a)) * 100 : 50
   return (
@@ -35,7 +34,6 @@ export default function PlanSection({ data, view }: { data: InvestData; view: In
 
 function WrapperGroup({ group, data, view }: { group: PlanGroup; data: InvestData; view: InvestView }) {
   const headingId = `plan-${group.wrapper}`
-  const logged = new Map<string, InvestmentLog>(view.monthLog.map((l) => [l.id, l]))
   return (
     <section className="plan-group" aria-labelledby={headingId}>
       <h3 className="plan-group-heading" id={headingId}>
@@ -59,7 +57,7 @@ function WrapperGroup({ group, data, view }: { group: PlanGroup; data: InvestDat
             )}
             <ul className="plan-list">
               {rows.map((row) => (
-                <PlanRowItem key={row.id} row={row} logged={logged.get(row.id)} month={view.month} taxYear={view.taxYear}
+                <PlanRowItem key={row.id} row={row} logged={view.logged.get(lineKey(row.wrapper, row.holdingId))} month={view.month} taxYear={view.taxYear}
                   platformId={group.platformId} />
               ))}
             </ul>

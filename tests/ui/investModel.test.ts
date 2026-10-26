@@ -5,7 +5,8 @@ import { seedHoldings } from '../../src/seed/holdings'
 import { seedPlatforms } from '../../src/seed/platforms'
 import { seedSettings } from '../../src/seed/settings'
 import {
-  breakdownLines, buildInvestView, investableInputFor, logId, planForUsed, planGroups, reasonText, type InvestData,
+  breakdownLines, buildInvestView, investableInputFor, investState, lineKey, logId, planForUsed, planGroups, reasonText,
+  withTaxYears, wrapperSummary, type InvestData,
 } from '../../src/ui/screens/invest/investModel'
 
 const TODAY = '2026-10-26'
@@ -141,7 +142,7 @@ describe('buildInvestView', () => {
     const v = buildInvestView(data(), TODAY)
     expect(v.investable.ok).toBe(true)
     if (!v.investable.ok) return
-    const total = planGroups(v.plan, seedHoldings, v.month)
+    const total = planGroups(v.plan, seedHoldings, v.month, v.taxYear)
       .flatMap((g) => g.rows)
       .reduce((s, r) => s + r.plannedPence, 0)
     expect(total).toBe(v.investable.investablePence)
@@ -161,34 +162,90 @@ describe('buildInvestView', () => {
     expect(old.wrappers.find((w) => w.wrapper === 'isa')!.pence).toBeGreaterThan(0)
   })
 
-  it("keeps this month's plan steady while lines are ticked off", () => {
-    const before = buildInvestView(data(), TODAY)
+  it("keeps this month's plan steady while lines are ticked off, even when ISA room is nearly used up", () => {
+    // £1,000 of ISA room left over 6 months: the ISA slot is capped at £166.66, so any extra "used" would shrink it.
+    const nearlyFull = [{ taxYear: '2026/27', wrapper: 'isa' as const, usedPence: 1900000 }]
+    const before = buildInvestView(data({ used: nearlyFull }), TODAY)
     const isa = before.wrappers.find((w) => w.wrapper === 'isa')!
+    expect(isa.pence).toBe(16666)
+    const row = before.groups.find((g) => g.wrapper === 'isa')!.rows.find((r) => r.holdingId === 'growth-global')!
     const log: InvestmentLog[] = [
-      { id: logId('2026-10', 'isa', 'growth-global'), month: '2026-10', wrapper: 'isa', holdingId: 'growth-global', plannedPence: isa.pence, actualPence: isa.pence, platformId: 'choose' },
+      { id: row.id, month: '2026-10', taxYear: '2026/27', wrapper: 'isa', holdingId: 'growth-global', plannedPence: row.plannedPence, actualPence: row.plannedPence, platformId: 'choose' },
     ]
-    const used = [{ taxYear: '2026/27', wrapper: 'isa' as const, usedPence: isa.pence }]
+    const used = [{ ...nearlyFull[0], usedPence: 1900000 + row.plannedPence }]
     const after = buildInvestView(data({ log, used }), TODAY)
     expect(after.wrappers).toEqual(before.wrappers)
     expect(after.plan.effectiveSplit).toEqual(before.plan.effectiveSplit)
+    expect(after.logged.get(lineKey('isa', 'growth-global'))?.id).toBe(row.id)
+    expect(after.otherLogged).toEqual([])
   })
 
-  it('planForUsed takes this month’s logged amounts back out of allowance used, never below zero', () => {
+  it('planForUsed takes this month’s logged amounts for this tax year back out, never below zero', () => {
     const log: InvestmentLog[] = [
-      { id: 'x', month: '2026-10', wrapper: 'isa', holdingId: 'h', plannedPence: 5000, actualPence: 5000, platformId: 'choose' },
-      { id: 'y', month: '2026-09', wrapper: 'isa', holdingId: 'h', plannedPence: 7000, actualPence: 7000, platformId: 'choose' },
-      { id: 'z', month: '2026-10', wrapper: 'pension', holdingId: 'h', plannedPence: 9000, actualPence: 9000, platformId: 'choose' },
+      { id: 'x', month: '2026-10', taxYear: '2026/27', wrapper: 'isa', holdingId: 'h', plannedPence: 5000, actualPence: 5000, platformId: 'choose' },
+      { id: 'y', month: '2026-09', taxYear: '2026/27', wrapper: 'isa', holdingId: 'h', plannedPence: 7000, actualPence: 7000, platformId: 'choose' },
+      { id: 'z', month: '2026-10', taxYear: '2026/27', wrapper: 'pension', holdingId: 'h', plannedPence: 9000, actualPence: 9000, platformId: 'choose' },
+      // Same budget month, another tax year: never touches 2026/27.
+      { id: 'w', month: '2026-10', taxYear: '2025/26', wrapper: 'isa', holdingId: 'h', plannedPence: 3000, actualPence: 3000, platformId: 'choose' },
     ]
     const used = [
       { taxYear: '2026/27', wrapper: 'isa' as const, usedPence: 20000 },
       { taxYear: '2026/27', wrapper: 'pension' as const, usedPence: 4000 },
-      { taxYear: '2025/26', wrapper: 'isa' as const, usedPence: 1 },
+      { taxYear: '2025/26', wrapper: 'isa' as const, usedPence: 3000 },
     ]
     expect(planForUsed(used, log, '2026-10', '2026/27')).toEqual([
       { taxYear: '2026/27', wrapper: 'isa', usedPence: 15000 },
       { taxYear: '2026/27', wrapper: 'pension', usedPence: 0 },
-      { taxYear: '2025/26', wrapper: 'isa', usedPence: 1 },
+      { taxYear: '2025/26', wrapper: 'isa', usedPence: 3000 },
     ])
+  })
+
+  it('across 6 April, a line logged for the old tax year does not count in the new one', () => {
+    // Start day 1: 3 Apr and 7 Apr 2027 are both in budget month 2027-04, but in different tax years.
+    const d = (p: Partial<InvestData>) => data({ settings: { ...seedSettings, allowances: { '2026/27': { isa: 2000000, pension: 6000000 }, '2027/28': { isa: 2000000, pension: 6000000 } } }, ...p })
+    const april3 = buildInvestView(d({}), '2027-04-03')
+    expect(april3.taxYear).toBe('2026/27')
+    const row = april3.groups.find((g) => g.wrapper === 'pension')!.rows[0]
+    expect(row.id).toBe(logId('2026/27', '2027-04', 'pension', row.holdingId))
+    const log: InvestmentLog[] = [
+      { id: row.id, month: '2027-04', taxYear: '2026/27', wrapper: 'pension', holdingId: row.holdingId, plannedPence: row.plannedPence, actualPence: row.plannedPence, platformId: 'choose' },
+    ]
+    const used = [{ taxYear: '2026/27', wrapper: 'pension' as const, usedPence: row.plannedPence }]
+    const fresh = buildInvestView(d({}), '2027-04-07')
+    const april7 = buildInvestView(d({ log, used }), '2027-04-07')
+    expect(april7.taxYear).toBe('2027/28')
+    expect(april7.wrappers).toEqual(fresh.wrappers)
+    expect(april7.logged.size).toBe(0)
+    expect(april7.otherLogged.map((l) => l.id)).toEqual([row.id])
+    const again = april7.groups.find((g) => g.wrapper === 'pension')!.rows.find((r) => r.holdingId === row.holdingId)!
+    expect(again.id).toBe(logId('2027/28', '2027-04', 'pension', row.holdingId))
+    expect(again.id).not.toBe(row.id)
+
+    // With ISA room nearly used in 2027/28, an old-year ISA log in the same budget month must not free up room.
+    const tight = [{ taxYear: '2027/28', wrapper: 'isa' as const, usedPence: 1900000 }]
+    const oldIsa: InvestmentLog = { ...log[0], id: 'old-isa', wrapper: 'isa', actualPence: 50000, plannedPence: 50000 }
+    expect(buildInvestView(d({ used: tight, log: [oldIsa] }), '2027-04-07').wrappers)
+      .toEqual(buildInvestView(d({ used: tight }), '2027-04-07').wrappers)
+  })
+
+  it('fills in a missing tax year from the budget month', () => {
+    const old = { id: 'o', month: '2026-04', wrapper: 'isa', holdingId: 'h', plannedPence: 1, actualPence: 1, platformId: 'p' } as unknown as InvestmentLog
+    // The budget month starts on 1 Apr (old tax year) with start day 1, on 6 Apr (new tax year) with start day 6.
+    expect(withTaxYears([old], 1)[0].taxYear).toBe('2025/26')
+    expect(withTaxYears([old], 6)[0].taxYear).toBe('2026/27')
+  })
+
+  it('names the state: a plan, nothing left over, or no figure', () => {
+    expect(investState(buildInvestView(data(), TODAY).investable)).toBe('invest')
+    expect(investState(buildInvestView(data({ streams: [] }), TODAY).investable)).toBe('none')
+    // The whole surplus goes to a large high-APR debt.
+    const zero = buildInvestView(data({ debts: [debt({ balancePence: 10000000, minimumPaymentPence: 0 })] }), TODAY)
+    expect(investState(zero.investable)).toBe('zero')
+    expect(zero.groups).toEqual([])
+  })
+
+  it('summarises where the money goes by wrapper', () => {
+    expect(wrapperSummary(buildInvestView(data(), TODAY).plan)).toBe('Pension £675.00, ISA £2,025.00')
   })
 
   it('returns the no-income reason when there is no income at all', () => {
@@ -218,5 +275,15 @@ describe('breakdownLines', () => {
     const last = lines[lines.length - 1]
     expect(last.label).toBe('Invest this month')
     expect(lines.slice(0, -1).reduce((s, l) => s + l.pence, 0)).toBe(last.pence)
+  })
+
+  it('ends with the shortfall when there is nothing to invest', () => {
+    const v = buildInvestView(
+      data({ streams: [{ id: 's', label: 'Salary', expectedMonthlyNetPence: 100000 }], txs: [tx({ amountPence: -150000, categoryId: 'housing' })] }),
+      TODAY,
+    )
+    const lines = breakdownLines(v)
+    const last = lines[lines.length - 1]
+    expect(last).toEqual({ label: 'Shortfall this month', pence: 100000 - 150000 - 10000, total: true })
   })
 })
