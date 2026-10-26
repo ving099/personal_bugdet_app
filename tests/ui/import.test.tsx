@@ -325,6 +325,57 @@ describe('Import: focus, busy and edge cases', () => {
     expect(screen.queryByText(/already in your records/)).not.toBeInTheDocument()
   })
 
+  it('keeps focus on the result notice after a successful undo', async () => {
+    for (let i = 0; i < 3; i++) {
+      const { user } = await importedOnce()
+      await user.click(screen.getAllByRole('button', { name: 'Undo import of single-amount.csv' })[1])
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Undo import' }))
+      const notice = (await screen.findByText(/Undone\. Removed/)).closest('[role="status"]') as HTMLElement
+      await new Promise((r) => setTimeout(r, 30))
+      expect(notice).toHaveFocus()
+      cleanup()
+    }
+  })
+
+  it('focuses the history heading when the opener is gone on close', async () => {
+    const { db, user } = await importedOnce()
+    await user.click(screen.getAllByRole('button', { name: 'Undo import of single-amount.csv' })[1])
+    await screen.findByRole('dialog')
+    await db.transactions.clear()
+    await waitFor(() => expect(screen.queryByText('single-amount.csv', { selector: '.history-name' })).not.toBeInTheDocument())
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('heading', { name: 'Import history' })).toHaveFocus()
+  })
+
+  it('uses only the latest selection when reads finish out of order', async () => {
+    const db = await freshDb()
+    await db.importProfiles.put({ id: 'p', bank: 'B', dateFormat: 'DD/MM/YYYY', dateColumn: 0, descriptionColumn: 1,
+      amountMode: 'single', amountColumn: 2, signConvention: 'negativeIsOut', headerRows: 1 })
+    await db.accounts.update('cur', { importProfileId: 'p' })
+    const user = setup(db)
+    await pickAccount(user, 'Everyday')
+    const slow = csv('a.csv', 'Date,Description,Amount\n03/04/2026,ALPHA SHOP,-1.00\n')
+    const text = slow.text.bind(slow)
+    slow.text = () => new Promise((resolve) => setTimeout(() => void text().then(resolve), 150))
+    const fast = csv('b.csv', 'Date,Description,Amount\n03/04/2026,BETA SHOP,-2.00\n')
+    const zone = screen.getByRole('group', { name: 'Statement files' })
+    fireEvent.drop(zone, { dataTransfer: { files: [slow] } })
+    fireEvent.drop(zone, { dataTransfer: { files: [fast] } })
+    expect(await screen.findByText('BETA SHOP')).toBeInTheDocument()
+    await new Promise((r) => setTimeout(r, 300))
+    expect(screen.queryByText('ALPHA SHOP')).not.toBeInTheDocument()
+    expect(screen.getByText('BETA SHOP')).toBeInTheDocument()
+  })
+
+  it('names a header-only file in a multi-file drop', async () => {
+    const db = await freshDb()
+    const user = setup(db)
+    await pickAccount(user, 'Everyday')
+    await mapAndPreview(user, csv('good.csv', fixture('single-amount.csv')), csv('none.csv', 'Date,Description,Amount\n'))
+    expect(screen.getByText('No transactions found in none.csv.')).toBeInTheDocument()
+    expect(screen.getByText('3 new, 0 already imported')).toBeInTheDocument()
+  })
+
   it('ignores files dropped while an import is running', async () => {
     const db = await freshDb()
     const user = setup(db)

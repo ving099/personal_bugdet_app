@@ -22,7 +22,8 @@ export default function ConfirmDialog({ title, children, confirmLabel, onCancel,
   const opener = useRef<Element | null>(null)
 
   useEffect(() => {
-    if (!opener.current) opener.current = document.activeElement
+    const active = document.activeElement
+    if (!opener.current && active && active !== document.body) opener.current = active
     box.current?.querySelector<HTMLElement>('button')?.focus()
     return () => {
       const back = opener.current

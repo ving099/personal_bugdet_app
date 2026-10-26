@@ -7,13 +7,15 @@ import { formatDisplayDate, plural, PREVIEW_ROW_LIMIT, summaryLine, type Preview
 interface ImportPreviewProps {
   preview: Preview
   fileNames: string[]
+  /** Files that had headings but no transactions. */
+  emptyFiles: string[]
   busy: boolean
   error: string
   onConfirm: () => void
   onEditMapping: () => void
 }
 
-export default function ImportPreview({ preview, fileNames, busy, error, onConfirm, onEditMapping }: ImportPreviewProps) {
+export default function ImportPreview({ preview, fileNames, emptyFiles, busy, error, onConfirm, onEditMapping }: ImportPreviewProps) {
   const [hideDuplicates, setHideDuplicates] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const rows = hideDuplicates ? preview.rows.filter((r) => !r.duplicate) : preview.rows
@@ -29,7 +31,9 @@ export default function ImportPreview({ preview, fileNames, busy, error, onConfi
       </h2>
       <Card>
         <p className="preview-summary">{summaryLine(preview)}</p>
-        {empty && <p className="import-hint">No transactions found in {fileNames.join(', ')}.</p>}
+        {emptyFiles.map((name) => (
+          <p key={name} className="import-hint">No transactions found in {name}.</p>
+        ))}
         {nothingNew && !empty && (
           <p className="import-hint">
             Nothing new to import. {preview.duplicates === 1 ? 'The row is' : `All ${preview.duplicates} rows are`} already in your records.

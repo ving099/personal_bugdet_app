@@ -54,6 +54,7 @@ export default function Import() {
   const readToken = useRef(0)
   const focusPreview = useRef(false)
   const noticeRef = useRef<HTMLDivElement>(null)
+  const [noticeTick, setNoticeTick] = useState(0)
 
   const accountId = chosen || (accounts?.length === 1 ? accounts[0].id : '')
   const account = accounts?.find((a) => a.id === accountId)
@@ -75,6 +76,11 @@ export default function Import() {
   )
   const batches = useMemo(() => (txs && accounts ? summariseBatches(txs, accounts) : []), [txs, accounts])
   const attention = useMemo(() => (txs && accounts ? unmatchedCardRepayments(txs, accounts) : []), [txs, accounts])
+
+  // Runs after the dialog's unmount cleanup in the same commit, so the notice keeps focus after an undo.
+  useEffect(() => {
+    if (noticeTick > 0) noticeRef.current?.focus()
+  }, [noticeTick])
 
   useEffect(() => {
     if (preview && focusPreview.current) {
@@ -101,10 +107,11 @@ export default function Import() {
     setOutcomes([])
     setNotice('')
     setFlagsFailed(false)
+    focusPreview.current = false
   }
 
   async function takeFiles(list: File[]) {
-    if (busy || reading) return
+    if (busy) return
     reset()
     const token = ++readToken.current
     setReading(true)
@@ -142,6 +149,7 @@ export default function Import() {
     working.current = true
     setBusy(true)
     setConfirmError('')
+    setFlagsFailed(false)
     try {
       const out = await importFiles(db, files)
       setOutcomes(out.results)
@@ -170,7 +178,8 @@ export default function Import() {
       setOutcomes((o) => o.map((r) => (r.batchId === undoTarget.batchId ? { ...r, undone: true } : r)))
       setNotice(`Undone. Removed ${plural(removed, 'transaction')} from ${undoTarget.label}.`)
       setUndoTarget(null)
-      setTimeout(() => noticeRef.current?.focus(), 0)
+      setFlagsFailed(false)
+      setNoticeTick((t) => t + 1)
     } catch {
       setUndoError("Couldn't undo this import. Nothing was changed. Try again.")
     } finally {
@@ -197,7 +206,7 @@ export default function Import() {
         {account?.kind === 'business' && (
           <p className="import-hint">Business accounts are excluded from your spending, but stay in your export.</p>
         )}
-        <Button className="link-btn" onClick={() => setAdding(true)}>Add another account</Button>
+        <Button className="link-btn" disabled={busy || reading} onClick={() => setAdding(true)}>Add another account</Button>
         <FileDrop onFiles={(f) => void takeFiles(f)} disabled={!account || busy} busy={reading} />
         {account && profile && staged.length === 0 && (
           <p className="import-hint">This account already has a saved layout, so choose a file and it will be read straight away.</p>
@@ -230,6 +239,7 @@ export default function Import() {
         <ImportPreview
           preview={preview}
           fileNames={files.map((f) => f.name)}
+          emptyFiles={files.filter((f) => f.rows.length === 0).map((f) => f.name)}
           busy={busy}
           error={confirmError}
           onConfirm={() => void confirm()}
