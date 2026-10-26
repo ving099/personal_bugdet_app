@@ -1,4 +1,5 @@
-import type { Rule } from '../domain/types'
+import type { Rule, Transaction } from '../domain/types'
+import { defaultRules, TRANSFERS_CATEGORY_ID } from '../seed/categories'
 import { merchantKey } from '../import/matching'
 
 /**
@@ -28,4 +29,21 @@ export function learnRule(description: string, categoryId: string): Rule {
     throw new Error(`Cannot learn a rule: no merchant text in "${description}"`)
   }
   return { id: `learned:${matchText}`, matchText, categoryId, source: 'learned' }
+}
+
+/**
+ * For rows stored before `categoryEditedByUser` existed: a Transfers row the built-in rules would not file there,
+ * or one a learned rule files there, was put there by the owner, so it is marked as set by hand (and stays out of
+ * income). Rows the default rules file under Transfers, rows in other categories and rows already marked are
+ * returned unchanged. Used by the v4 migration and when restoring a backup.
+ */
+export function withHandFiledTransferMark<T extends Pick<Transaction, 'description' | 'categoryId' | 'categoryEditedByUser'>>(
+  tx: T,
+  learned: Rule[],
+): T {
+  if (tx.categoryId !== TRANSFERS_CATEGORY_ID || tx.categoryEditedByUser) return tx
+  const byOwner =
+    categorise(tx.description, defaultRules) !== TRANSFERS_CATEGORY_ID ||
+    categorise(tx.description, learned.filter((r) => r.source === 'learned')) === TRANSFERS_CATEGORY_ID
+  return byOwner ? { ...tx, categoryEditedByUser: true } : tx
 }

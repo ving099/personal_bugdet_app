@@ -1,4 +1,5 @@
-import type { Category, Settings } from '../domain/types'
+import { withHandFiledTransferMark } from '../categorise/rules'
+import type { Category, Rule, Settings, Transaction } from '../domain/types'
 import { withNonSpendingFlag } from '../seed/categories'
 import type { BudgetDB } from '../storage/db'
 
@@ -38,7 +39,7 @@ const isRow = (r: unknown) => typeof r === 'object' && r !== null && !Array.isAr
  * Replaces ALL data in `db` with the snapshot, in one transaction. Validates before touching the db and
  * rolls back on any failure. Settings are replaced, except `appLock`: the device keeps its own app lock (or none),
  * whatever the file holds, and old files that carry one are ignored. The non-spending seed categories are marked
- * as excluded (as the v3 migration does). Unknown tables are ignored; known tables missing from the snapshot become empty.
+ * as excluded (as the v3 migration does), and hand-filed Transfers rows are marked (as the v4 migration does). Unknown tables are ignored; known tables missing from the snapshot become empty.
  */
 export async function restoreSnapshot(db: BudgetDB, json: string): Promise<void> {
   let parsed: unknown
@@ -62,6 +63,7 @@ export async function restoreSnapshot(db: BudgetDB, json: string): Promise<void>
     rowsByTable.set(t.name, rows)
   }
 
+  const learned = (rowsByTable.get('rules') ?? []) as Rule[]
   await db.transaction('rw', db.tables, async () => {
     const deviceLock = (await db.settings.get('main'))?.appLock ?? null
     for (const t of db.tables) {
@@ -73,7 +75,10 @@ export async function restoreSnapshot(db: BudgetDB, json: string): Promise<void>
           : t.name === 'categories'
             ? // Backups made before schema v3 carry the old flag on the non-spending seed categories.
               rows.map((r) => withNonSpendingFlag(r as Category))
-            : rows,
+            : t.name === 'transactions'
+              ? // Backups made before categoryEditedByUser existed: mark Transfers rows the owner filed by hand.
+                rows.map((r) => withHandFiledTransferMark(r as Transaction, learned))
+              : rows,
       )
     }
   })

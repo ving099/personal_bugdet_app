@@ -122,6 +122,21 @@ describe('snapshot', () => {
     expect(await dump(dst)).toEqual(before)
   })
 
+  it('marks hand-filed Transfers rows when restoring a backup made before the marker existed (part 3)', async () => {
+    const base = { accountId: 'a1', date: '2026-09-01', amountPence: 50000, batchId: 'b1', isTransfer: false, isRefund: false }
+    await src.rules.put({ id: 'learned:mum', matchText: 'transfer from mum', categoryId: 'transfers', source: 'learned' })
+    await src.transactions.bulkAdd([
+      { ...base, id: 'hand', fingerprint: 'h', description: 'J SMITH ISA WITHDRAWAL', categoryId: 'transfers' },
+      { ...base, id: 'default', fingerprint: 'd', description: 'TRANSFER FROM BIZ LTD', categoryId: 'transfers' },
+      { ...base, id: 'learned', fingerprint: 'l', description: 'TRANSFER FROM MUM', categoryId: 'transfers' },
+    ])
+    await restoreSnapshot(dst, await exportSnapshot(src))
+    expect((await dst.transactions.get('hand'))?.categoryEditedByUser).toBe(true)
+    expect((await dst.transactions.get('default'))?.categoryEditedByUser).toBeUndefined()
+    expect((await dst.transactions.get('learned'))?.categoryEditedByUser).toBe(true)
+    expect((await dst.transactions.get('t1'))?.categoryEditedByUser).toBeUndefined()
+  })
+
   it('marks the non-spending seed categories when restoring a backup made before they were excluded', async () => {
     await src.categories.update('debt-payments', { excludedFromSpending: false, monthlyLimitPence: 12300 })
     await src.categories.update('income', { excludedFromSpending: false })

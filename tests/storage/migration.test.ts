@@ -55,3 +55,37 @@ describe('schema v3', () => {
     })
   })
 })
+
+const row = (id: string, description: string, categoryId: string | undefined, extra: object = {}) => ({
+  id, accountId: 'cur', date: '2026-09-01', amountPence: 50000, description, categoryId, fingerprint: id, batchId: 'b',
+  isTransfer: false, isRefund: false, ...extra,
+})
+
+describe('schema v4', () => {
+  it('marks Transfers rows the owner must have filed by hand, and leaves rule-filed ones alone', async () => {
+    const name = `migration-v4-${Date.now()}`
+    names.push(name)
+    const v3 = new Dexie(name)
+    v3.version(3).stores({
+      transactions: 'id, [accountId+date], fingerprint, batchId', rules: 'id', categories: 'id, name', settings: 'id', investmentLog: 'id, month',
+    })
+    await v3.table('rules').bulkPut([
+      { id: 'learned:mum', matchText: 'transfer from mum', categoryId: 'transfers', source: 'learned' },
+    ])
+    await v3.table('transactions').bulkPut([
+      row('hand', 'J SMITH ISA WITHDRAWAL', 'transfers'),
+      row('default', 'TRANSFER FROM BIZ LTD', 'transfers'),
+      row('learned', 'TRANSFER FROM MUM', 'transfers'),
+      row('already', 'J SMITH ISA WITHDRAWAL', 'transfers', { categoryEditedByUser: true }),
+      row('other', 'J SMITH ISA WITHDRAWAL', 'income'),
+    ])
+    v3.close()
+
+    const db = openDb(name)
+    const rows = await db.transactions.toArray()
+    db.close()
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.categoryEditedByUser]))).toEqual({
+      hand: true, default: undefined, learned: true, already: true, other: undefined,
+    })
+  })
+})
