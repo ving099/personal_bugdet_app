@@ -121,14 +121,20 @@ describe('Settings: investing', () => {
     const inv = await screen.findByRole('region', { name: 'Investing' })
     await waitFor(() => expect(within(inv).getByText("Turn this on only if you're eligible for a Lifetime ISA.")).toBeInTheDocument())
     expect(within(inv).queryByLabelText('Lifetime ISA share (%, optional)')).not.toBeInTheDocument()
-    await user.click(within(inv).getByRole('button', { name: 'Move General investment account up' }))
+    // Only the pension and the ISA can be reordered; general investing always takes what is left.
+    expect(within(inv).getAllByRole('listitem').map((li) => li.textContent?.replace(/UpDown$/, ''))).toEqual([
+      'Pension (SIPP)', 'ISA (stocks and shares, and Lifetime ISA)',
+    ])
+    expect(within(inv).queryByRole('button', { name: /Move General investment account/ })).not.toBeInTheDocument()
+    expect(within(inv).getByText('General investing always gets whatever is left.')).toBeInTheDocument()
+    await user.click(within(inv).getByRole('button', { name: 'Move ISA (stocks and shares, and Lifetime ISA) up' }))
     await user.click(within(inv).getByRole('switch', { name: 'Use a Lifetime ISA' }))
     await setField(user, within(inv).getByLabelText('Pension share (%)'), '40')
     await setField(user, within(inv).getByLabelText('Lifetime ISA share (%, optional)'), '50')
     await user.click(within(inv).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(within(inv).getByRole('status')).toHaveTextContent('Saved'))
     const row = await db.settings.get('main')
-    expect(row?.wrapperOrder).toEqual(['pension', 'isa', 'gia', 'lisa'])
+    expect(row?.wrapperOrder).toEqual(['isa', 'lisa', 'pension', 'gia'])
     expect(row?.wrapperShares).toEqual({ pension: 40, lisa: 50 })
     expect(row?.lisaEnabled).toBe(true)
   })

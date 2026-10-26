@@ -18,18 +18,21 @@ export interface WrapperAllocation {
 /**
  * Splits the investable amount across wrappers for the tax year containing `today`.
  *
- * Order of allocation: pension, then ISA slot (with LISA carved from inside it), then GIA.
- * - Pension = min(floor(pension% x investable), remaining pension allowance for the year).
- *   Not divided by months left: monthly pension contributions are far below the annual cap.
- * - ISA slot = min(remainder, floor(remainingIsa / monthsLeft)). remainingIsa is the ISA
+ * Order of allocation: by default pension, then ISA slot (with LISA carved from inside it), then GIA.
+ * `settings.wrapperOrder` decides whether the pension or the ISA slot comes first (see pensionFirst); LISA always
+ * sits inside the ISA slot and GIA always takes what is left, wherever they appear in the order.
+ * - Pension = min(floor(pension% x investable), remaining pension allowance for the year), and when the ISA slot
+ *   comes first, also at most what the ISA slot left. Not divided by months left: monthly pension contributions
+ *   are far below the annual cap.
+ * - ISA slot = min(money available to it, floor(remainingIsa / monthsLeft)), where the money available is the
+ *   remainder after the pension, or the whole investable amount when the ISA comes first. remainingIsa is the ISA
  *   allowance minus used ISA and LISA rows for this tax year (LISA counts against the ISA limit).
  * - LISA (only when enabled) = min(ISA slot, floor(remainingLisa / monthsLeft), explicit LISA
  *   share if the user set one). With no LISA share it takes the whole carve-out up to its cap.
  *   ISA gets the rest of the slot, so LISA + ISA <= ISA slot.
  * - GIA takes the remainder, so the result always sums exactly to investablePence.
  *
- * Output is always [pension, isa, (lisa), gia]; `settings.wrapperOrder` is not used for
- * ordering because the allocation order is fixed by the rules above.
+ * Output follows the priority: [pension, isa, (lisa), gia] or [isa, (lisa), pension, gia].
  *
  * Allowance lookup: if `allowances` has an entry for the current tax year it is used as is
  * (a wrapper missing or 0 inside a configured year means zero room). If the year is missing,
@@ -38,6 +41,18 @@ export interface WrapperAllocation {
  * room is zero and those entries say no allowances are configured.
  * `wrapperShares.pension` / `.lisa`, when given, must be finite numbers in 0..100.
  */
+/**
+ * True when the pension comes before the ISA slot in `order` (the ISA slot's place is the first of 'isa' and 'lisa').
+ * A missing or unusable order (not a list, or without both a pension and an ISA entry) gives the default: true.
+ */
+export function pensionFirst(order: unknown): boolean {
+  if (!Array.isArray(order)) return true
+  const pension = order.indexOf('pension')
+  const isa = [order.indexOf('isa'), order.indexOf('lisa')].filter((i) => i >= 0)
+  if (pension < 0 || isa.length === 0) return true
+  return pension < Math.min(...isa)
+}
+
 export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocation[] {
   const { investablePence, today, settings, used, lisaEnabled } = input
   if (!Number.isInteger(investablePence)) {
@@ -84,11 +99,26 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
   const remainingLisa = Math.max(0, allowance('lisa') - usedIn('lisa'))
   const remainingIsa = Math.max(0, allowance('isa') - usedIn('isa') - usedIn('lisa'))
 
-  // Pension
+  const first = pensionFirst(settings.wrapperOrder)
+  const monthlyIsaRoom = Math.floor(remainingIsa / monthsLeft)
   const pensionWanted = Math.floor((budget * (settings.wrapperShares.pension ?? 0)) / 100)
-  const pension = Math.min(pensionWanted, remainingPension)
+  const pensionAllowed = Math.min(pensionWanted, remainingPension)
+  let pension: Pence
+  let isaSlot: Pence
+  if (first) {
+    pension = pensionAllowed
+    isaSlot = Math.min(budget - pension, monthlyIsaRoom)
+  } else {
+    isaSlot = Math.min(budget, monthlyIsaRoom)
+    pension = Math.min(pensionAllowed, budget - isaSlot)
+  }
+  const availableToIsa = first ? budget - pension : budget
+
+  // Pension
   let pensionNote: string | undefined
-  if (pension < pensionWanted && limitsYear) {
+  if (pension < pensionAllowed) {
+    pensionNote = 'Less than your pension share: the ISA comes first in your order'
+  } else if (pension < pensionWanted && limitsYear) {
     pensionNote =
       allowance('pension') === 0
         ? `No pension allowance for ${limitsYear}`
@@ -98,11 +128,8 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
   }
 
   // ISA slot (LISA is carved from inside)
-  const afterPension = budget - pension
-  const monthlyIsaRoom = Math.floor(remainingIsa / monthsLeft)
-  const isaSlot = Math.min(afterPension, monthlyIsaRoom)
   let slotNote: string | undefined
-  if (isaSlot < afterPension && limitsYear) {
+  if (isaSlot < availableToIsa && limitsYear) {
     slotNote =
       remainingIsa === 0
         ? allowance('isa') === 0
@@ -132,11 +159,9 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
   const isa = isaSlot - lisa
   const gia = budget - pension - isaSlot
 
-  const out: WrapperAllocation[] = [
-    { wrapper: 'pension', pence: pension, ...withNote(pensionNote) },
-    { wrapper: 'isa', pence: isa, ...withNote(slotNote) },
-  ]
-  if (lisaEnabled) out.push({ wrapper: 'lisa', pence: lisa, ...withNote(lisaNote) })
-  out.push({ wrapper: 'gia', pence: gia })
-  return out
+  const pensionLine: WrapperAllocation = { wrapper: 'pension', pence: pension, ...withNote(pensionNote) }
+  const isaLines: WrapperAllocation[] = [{ wrapper: 'isa', pence: isa, ...withNote(slotNote) }]
+  if (lisaEnabled) isaLines.push({ wrapper: 'lisa', pence: lisa, ...withNote(lisaNote) })
+  const ordered = first ? [pensionLine, ...isaLines] : [...isaLines, pensionLine]
+  return [...ordered, { wrapper: 'gia', pence: gia }]
 }

@@ -243,4 +243,70 @@ describe('allocateWrappers', () => {
     expect(() => run(100.5)).toThrow(RangeError)
     expect(() => run(100000, { used: [used('2026/27', 'isa', -1)] })).toThrow(RangeError)
   })
+
+  describe('priority order (settings.wrapperOrder)', () => {
+    const isaFirst = { ...settings, wrapperOrder: ['isa', 'lisa', 'pension', 'gia'] as Wrapper[] }
+
+    it('with ISA first, the ISA slot fills before the pension share is taken from what is left', () => {
+      // ISA room 2,000,000 / 6 = 333,333 a month; investable 400,000.
+      const r = run(400000, { s: isaFirst })
+      expect(r.map((x) => x.wrapper)).toEqual(['isa', 'pension', 'gia'])
+      expect(get(r, 'isa')).toBe(333333)
+      expect(get(r, 'pension')).toBe(66667)
+      expect(get(r, 'gia')).toBe(0)
+      expect(r.find((x) => x.wrapper === 'pension')?.note).toBe('Less than your pension share: the ISA comes first in your order')
+      expect(sum(r)).toBe(400000)
+    })
+
+    it('with ISA first and plenty of money, pension still gets its full share and GIA the rest', () => {
+      const r = run(1000000, { s: isaFirst })
+      expect(get(r, 'isa')).toBe(333333)
+      expect(get(r, 'pension')).toBe(250000)
+      expect(get(r, 'gia')).toBe(1000000 - 333333 - 250000)
+      expect(r.find((x) => x.wrapper === 'pension')?.note).toBeUndefined()
+    })
+
+    it('with ISA first, everything goes to the ISA while it has room this month', () => {
+      const r = run(100000, { s: isaFirst })
+      expect(get(r, 'isa')).toBe(100000)
+      expect(get(r, 'pension')).toBe(0)
+      const d = run(100000)
+      expect(get(d, 'pension')).toBe(25000)
+    })
+
+    it('keeps LISA inside the ISA slot and inside the shared ISA allowance whatever the order', () => {
+      const r = run(400000, { s: isaFirst, lisaEnabled: true, used: [used('2026/27', 'lisa', 100000), used('2026/27', 'isa', 1000000)] })
+      // ISA room = 2,000,000 - 1,000,000 - 100,000 = 900,000 -> 150,000 a month; LISA room 300,000 -> 50,000 a month.
+      expect(r.map((x) => x.wrapper)).toEqual(['isa', 'lisa', 'pension', 'gia'])
+      expect(get(r, 'lisa')).toBe(50000)
+      expect(get(r, 'isa')).toBe(100000)
+      expect(get(r, 'pension')).toBe(100000)
+      expect(get(r, 'gia')).toBe(150000)
+      expect(sum(r)).toBe(400000)
+    })
+
+    it('always sums exactly, for both orders and awkward amounts', () => {
+      for (const amt of [1, 7, 99999, 100001, 333334, 9999999]) {
+        for (const lisa of [false, true]) {
+          const r = run(amt, { s: isaFirst, lisaEnabled: lisa })
+          expect(sum(r)).toBe(amt)
+          expect(r.every((x) => Number.isInteger(x.pence) && x.pence >= 0)).toBe(true)
+        }
+      }
+    })
+
+    it('treats LISA before ISA as the ISA group, and GIA anywhere as last', () => {
+      const r = run(400000, { s: { ...settings, wrapperOrder: ['gia', 'lisa', 'pension', 'isa'] } })
+      expect(r.map((x) => x.wrapper)).toEqual(['isa', 'pension', 'gia'])
+      expect(get(r, 'isa')).toBe(333333)
+    })
+
+    it('falls back to pension first when the order is missing or invalid', () => {
+      for (const wrapperOrder of [[], ['isa'], ['pension'], ['bogus', 'isa'], undefined] as unknown as Wrapper[][]) {
+        const r = run(400000, { s: { ...settings, wrapperOrder } })
+        expect(r.map((x) => x.wrapper)).toEqual(['pension', 'isa', 'gia'])
+        expect(get(r, 'pension')).toBe(100000)
+      }
+    })
+  })
 })

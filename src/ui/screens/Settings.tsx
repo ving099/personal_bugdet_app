@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import type { Settings as SettingsRow, Wrapper } from '../../domain/types'
+import { pensionFirst } from '../../invest/wrappers'
 import { Button, NumberInput } from '../components/forms'
 import SplitBar from '../components/SplitBar'
 import { parseNumber, todayISO } from '../formValues'
@@ -15,9 +16,13 @@ import { SaveRow, SettingsSection } from './SettingsSection'
 import { validateBucketSplit, validateMonthStartDay, validatePercent } from './settingsValidation'
 import { useSaveStatus } from './useSaveStatus'
 
-const WRAPPER_NAMES: Record<Wrapper, string> = {
-  pension: 'Pension (SIPP)', isa: 'Stocks and shares ISA', lisa: 'Lifetime ISA', gia: 'General investment account',
+/** The two places money can go first. The Lifetime ISA sits inside the ISA allowance; general investing is always last. */
+type Priority = 'pension' | 'isa'
+const PRIORITY_NAMES: Record<Priority, string> = {
+  pension: 'Pension (SIPP)', isa: 'ISA (stocks and shares, and Lifetime ISA)',
 }
+const toWrapperOrder = (p: Priority[]): Wrapper[] =>
+  p[0] === 'pension' ? ['pension', 'isa', 'lisa', 'gia'] : ['isa', 'lisa', 'pension', 'gia']
 
 function BudgetSection({ settings }: { settings: SettingsRow }) {
   const db = useDb()
@@ -74,7 +79,7 @@ function InvestingSection({ settings }: { settings: SettingsRow }) {
   const { status, run, setStatus, clear } = useSaveStatus()
   const [growth, setGrowth] = useState(String(settings.bucketSplit.growth))
   const [aggressive, setAggressive] = useState(String(settings.bucketSplit.aggressive))
-  const [order, setOrder] = useState<Wrapper[]>(settings.wrapperOrder)
+  const [order, setOrder] = useState<Priority[]>(pensionFirst(settings.wrapperOrder) ? ['pension', 'isa'] : ['isa', 'pension'])
   const [pension, setPension] = useState(String(settings.wrapperShares.pension ?? 0))
   const [lisaShare, setLisaShare] = useState(settings.wrapperShares.lisa === undefined ? '' : String(settings.wrapperShares.lisa))
   const [lisaOn, setLisaOn] = useState(settings.lisaEnabled ?? false)
@@ -111,7 +116,7 @@ function InvestingSection({ settings }: { settings: SettingsRow }) {
       db.settings
         .update('main', {
           bucketSplit: { growth: g, aggressive: a },
-          wrapperOrder: order,
+          wrapperOrder: toWrapperOrder(order),
           wrapperShares: shares,
           lisaEnabled: lisaOn,
         })
@@ -135,21 +140,22 @@ function InvestingSection({ settings }: { settings: SettingsRow }) {
       )}
 
       <h3 className="settings-subheading">Account order</h3>
-      <p className="settings-note">Money goes to the accounts at the top first.</p>
+      <p className="settings-note">Money goes to the account at the top first.</p>
       <ol className="order-list">
         {order.map((w, i) => (
           <li className="order-item" key={w}>
-            <span className="order-name">{WRAPPER_NAMES[w]}</span>
-            <Button variant="secondary" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${WRAPPER_NAMES[w]} up`}>
+            <span className="order-name">{PRIORITY_NAMES[w]}</span>
+            <Button variant="secondary" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${PRIORITY_NAMES[w]} up`}>
               Up
             </Button>
             <Button variant="secondary" disabled={i === order.length - 1} onClick={() => move(i, 1)}
-              aria-label={`Move ${WRAPPER_NAMES[w]} down`}>
+              aria-label={`Move ${PRIORITY_NAMES[w]} down`}>
               Down
             </Button>
           </li>
         ))}
       </ol>
+      <p className="settings-note">General investing always gets whatever is left.</p>
 
       <h3 className="settings-subheading">Shares</h3>
       <div className="row-fields">

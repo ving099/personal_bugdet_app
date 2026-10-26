@@ -326,3 +326,16 @@ describe('investableInputFor: debt payments are not double-counted (review I1)',
     expect(input.debtMinimumsPence).toBe(15000)
   })
 })
+
+describe('buildInvestView honours the account order (review I4)', () => {
+  it('puts the ISA line first when the ISA comes first, and the plan still sums exactly', () => {
+    const d = data({ settings: { ...seedSettings, onboardingDone: true, wrapperOrder: ['isa', 'lisa', 'pension', 'gia'] } })
+    const view = buildInvestView(d, TODAY)
+    expect(view.investable.ok).toBe(true)
+    if (!view.investable.ok) return
+    expect(view.wrappers.map((w) => w.wrapper)).toEqual(['isa', 'pension', 'gia'])
+    expect(view.wrappers.reduce((a, w) => a + w.pence, 0)).toBe(view.investable.investablePence)
+    expect(view.plan.holdings.reduce((a, h) => a + h.pence, 0)).toBe(view.investable.investablePence)
+    expect(view.plan.lines[0].wrapper).toBe('isa')
+  })
+})
