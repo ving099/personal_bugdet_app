@@ -6,7 +6,7 @@ A private budgeting and investing-suggestions app for UK households. It runs in 
 
 - **Import** bank and card statements (CSV files). The app guesses the column layout, remembers it per account, spots duplicates and skips transfers between your own accounts.
 - **Categorise** spending: rules place transactions automatically, and on the Budget tab you can pick a category for anything left uncategorised.
-- **Budget** the month against your planned amounts, with debts, savings pots and sinking funds alongside.
+- **Budget** the month against your planned amounts, with debts, savings pots and yearly bills alongside.
 - **Invest** shows what you can afford to invest this month, split across tax wrappers (pension, ISA, optionally Lifetime ISA, and general account) and a list of example funds. You tick lines off as you buy them, and your remaining allowances update.
 - **Month-end spreadsheet** with seven sheets (Summary, Transactions, Budget vs actual, Income by stream, Debts, Savings and yearly bills, Investment plan).
 
