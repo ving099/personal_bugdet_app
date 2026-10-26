@@ -36,6 +36,7 @@ interface Props {
 }
 
 export default function PayoffTimeline({ debts, today, extraDebtPence }: Props) {
+  const [announce, setAnnounce] = useState('')
   const [extra, setExtra] = useState(() => penceToInput(extraDebtPence ?? 0))
   const parsed = extra.trim() === '' ? ({ ok: true, pence: 0 } as const) : parseMoney(extra)
   const negative = parsed.ok && parsed.pence < 0
@@ -66,13 +67,16 @@ export default function PayoffTimeline({ debts, today, extraDebtPence }: Props) 
   return (
     <div className="payoff">
       <h3 className="import-subheading">Payoff timeline</h3>
-      <div className="payoff-input">
+      <div className="payoff-input" onBlur={() => setAnnounce(headline)}>
         <MoneyInput label="Extra per month" value={extra} onChange={setExtra}
           hint="The Invest tab shows how much extra the plan puts towards debt." />
         {negative && <p className="field-error">Extra cannot be negative.</p>}
       </div>
+      <p className="sr-only" role="status">
+        {announce}
+      </p>
       <Card className="debtfree">
-        <p className="debtfree-line" role="status">
+        <p className="debtfree-line">
           {headline}
         </p>
         {start > 0 && (

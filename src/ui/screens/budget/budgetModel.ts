@@ -23,6 +23,8 @@ export interface BudgetRow {
   statusText: string
   /** True when there is no limit to measure against. */
   noLimit: boolean
+  /** False for rows that are not a real category (Uncategorised, removed categories). */
+  canLimit: boolean
   /** 'Over by £50.00' when spending is past the limit. */
   overText?: string
   /** 0 to 1 of the bar to fill. */
@@ -39,8 +41,8 @@ export function buildBudgetRows(input: {
   accounts: Account[]
 }): BudgetRow[] {
   const { spentByCategory, categories, monthTxs, accounts } = input
-  const make = (id: string, name: string, limitPence: Pence, spentPence: Pence, count?: number): BudgetRow => {
-    const base = { id, name, spentPence, limitPence, noLimit: limitPence <= 0, ...(count !== undefined ? { count } : {}) }
+  const make = (id: string, name: string, limitPence: Pence, spentPence: Pence, categoryKnown: boolean, count?: number): BudgetRow => {
+    const base = { id, name, spentPence, limitPence, noLimit: limitPence <= 0, canLimit: !!categoryKnown, ...(count !== undefined ? { count } : {}) }
     if (spentPence < 0) {
       return { ...base, standing: 'refunds', statusText: `Refunds ${formatGBP(-spentPence)}`, fill: 0 }
     }
@@ -60,16 +62,16 @@ export function buildBudgetRows(input: {
   const known = new Set(categories.map((c) => c.id))
   const rows = categories
     .filter((c) => !c.excludedFromSpending)
-    .map((c) => make(c.id, c.name, c.monthlyLimitPence, spentByCategory[c.id] ?? 0))
+    .map((c) => make(c.id, c.name, c.monthlyLimitPence, spentByCategory[c.id] ?? 0, true))
   // A row can name a category that no longer exists; keep its spending visible.
   for (const [id, spent] of Object.entries(spentByCategory)) {
-    if (id !== UNCATEGORISED && !known.has(id)) rows.push(make(id, 'Unknown category', 0, spent))
+    if (id !== UNCATEGORISED && !known.has(id)) rows.push(make(id, 'Unknown category', 0, spent, false))
   }
   rows.sort((a, b) => b.spentPence - a.spentPence || a.name.localeCompare(b.name))
 
   if (UNCATEGORISED in spentByCategory) {
     const count = monthTxs.filter((t) => t.categoryId === undefined && countsAsListed(t, accounts) && !t.isTransfer).length
-    rows.unshift(make(UNCATEGORISED, 'Uncategorised', 0, spentByCategory[UNCATEGORISED], count))
+    rows.unshift(make(UNCATEGORISED, 'Uncategorised', 0, spentByCategory[UNCATEGORISED], false, count))
   }
   return rows
 }

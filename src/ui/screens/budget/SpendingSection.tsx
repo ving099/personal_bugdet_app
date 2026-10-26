@@ -25,7 +25,7 @@ export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, 
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   // The changed row leaves its list, so focus goes to the category row instead of the vanished button.
-  const focusLater = useDeferredFocus()
+  const focusLater = useDeferredFocus(rows)
 
   async function guarded(work: () => Promise<string>) {
     setError('')
@@ -46,7 +46,7 @@ export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, 
       setNotice(othersChanged > 0 ? `Updated ${plural(othersChanged, 'similar transaction')}.` : 'Category changed.')
       setError('')
       setEditing(null)
-      focusLater(openId ? `cat-${openId}` : 'spending-heading')
+      focusLater(...(openId ? [`cat-${openId}`] : []), 'spending-heading')
     } catch {
       setDialogError("Couldn't save that. Nothing was changed.")
     } finally {
@@ -54,7 +54,8 @@ export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, 
     }
   }
 
-  const similarCount = editing ? Math.max(0, similarTransactionIds(allTxs, editing).length - 1) : 0
+  const similarIds = editing ? new Set(similarTransactionIds(allTxs, editing)) : new Set<string>()
+  const similar = editing ? allTxs.filter((t) => similarIds.has(t.id) && t.id !== editing.id) : []
   return (
     <section className="import-section" aria-labelledby="spending-heading">
       <h2 className="import-heading" id="spending-heading" tabIndex={-1}>
@@ -97,7 +98,7 @@ export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, 
         <RecategoriseDialog
           tx={editing}
           categories={categories}
-          similarCount={similarCount}
+          similar={similar}
           busy={busy}
           error={dialogError}
           fallbackFocusId={openId ? `cat-${openId}` : 'spending-heading'}

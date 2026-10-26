@@ -38,6 +38,7 @@ function LimitForm({ row, onSave }: { row: BudgetRow; onSave: (pence: number) =>
     >
       <MoneyInput
         label="Set monthly limit"
+        quiet
         value={value}
         onChange={(v) => { setValue(v); setError('') }}
         hint="Leave it blank or enter 0 to remove the limit."
@@ -55,7 +56,7 @@ export default function CategoryRow({ row, expanded, monthTxs, accounts, onToggl
   const bodyId = useId()
   const txs = expanded ? categoryTransactions(monthTxs, accounts, row.id) : []
   const shown = showAll ? txs : txs.slice(0, LIST_LIMIT)
-  const hasBar = row.limitPence > 0
+  const hasBar = row.limitPence > 0 || row.standing === 'refunds'
   return (
     <li className="cat" data-standing={row.standing}>
       <button type="button" className="cat-head" aria-expanded={expanded} aria-controls={bodyId} id={`cat-${row.id}`} onClick={onToggle}>
@@ -86,7 +87,7 @@ export default function CategoryRow({ row, expanded, monthTxs, accounts, onToggl
       )}
       {expanded && (
         <div className="cat-body" id={bodyId}>
-          {row.id !== UNCATEGORISED && <LimitForm row={row} onSave={onSaveLimit} />}
+          {row.canLimit && <LimitForm row={row} onSave={onSaveLimit} />}
           {txs.length === 0 ? (
             <p className="import-hint">No transactions in this period.</p>
           ) : (

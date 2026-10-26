@@ -9,7 +9,7 @@ interface Props {
   tx: Transaction
   categories: Category[]
   /** Other stored rows with the same merchant. */
-  similarCount: number
+  similar: Transaction[]
   busy: boolean
   error?: string
   fallbackFocusId?: string
@@ -17,11 +17,13 @@ interface Props {
   onSave: (categoryId: string, applyToSimilar: boolean) => void
 }
 
-export default function RecategoriseDialog({ tx, categories, similarCount, busy, error, fallbackFocusId, onCancel, onSave }: Props) {
+export default function RecategoriseDialog({ tx, categories, similar, busy, error, fallbackFocusId, onCancel, onSave }: Props) {
   const canMatch = merchantKey(tx.description) !== ''
   const [categoryId, setCategoryId] = useState(tx.categoryId ?? '')
-  const [similar, setSimilar] = useState(canMatch)
+  const [applyAll, setApplyAll] = useState(canMatch)
   const [problem, setProblem] = useState('')
+  // Rows already in the chosen category are not changed, so they are not counted.
+  const similarCount = similar.filter((t) => t.categoryId !== categoryId).length
   const sorted = [...categories].sort((a, b) => a.name.localeCompare(b.name))
   const options = [
     ...(tx.categoryId === undefined ? [{ value: '', label: 'Choose a category' }] : []),
@@ -33,7 +35,7 @@ export default function RecategoriseDialog({ tx, categories, similarCount, busy,
       setProblem('Choose a category.')
       return
     }
-    onSave(categoryId, similar && canMatch)
+    onSave(categoryId, applyAll && canMatch)
   }
 
   return (
@@ -50,9 +52,9 @@ export default function RecategoriseDialog({ tx, categories, similarCount, busy,
       <Select label="Category" value={categoryId} options={options} onChange={(v) => { setCategoryId(v); setProblem('') }} />
       <Checkbox
         label="Apply to all similar"
-        checked={similar && canMatch}
+        checked={applyAll && canMatch}
         disabled={!canMatch}
-        onChange={setSimilar}
+        onChange={setApplyAll}
         hint={
           canMatch
             ? similarCount > 0

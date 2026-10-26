@@ -42,7 +42,8 @@ export function useCrud<T extends { id: string; name: string }>(ops: Ops<T>, ids
       await ops.remove(deleting)
       setNotice(`Deleted ${deleting.name}.`)
       setDeleting(null)
-      setEditing(null)
+      // An unsaved form open on another row stays as it is.
+      setEditing((open) => (open === deleting.id ? null : open))
       focusLater(ids.heading)
     } catch {
       setDeleteError("Couldn't delete that. Nothing was changed.")

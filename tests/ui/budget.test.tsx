@@ -332,6 +332,80 @@ describe('Budget: re-categorise and learned rules', () => {
   })
 })
 
+describe('Budget: focus after a change', () => {
+  it('falls back to the Spending heading when the changed row was the last Uncategorised one', async () => {
+    const db = await freshDb()
+    const user = await setup(db, [tx({ description: 'LONE SHOP 1', amountPence: -1000 })])
+    await user.click(await rowButton('Uncategorised'))
+    await recategorise(user, 'LONE SHOP 1', 'Entertainment')
+    await screen.findByText('Category changed.')
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^Uncategorised/ })).not.toBeInTheDocument()
+      expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Spending' }))
+    })
+    expect(document.activeElement).not.toBe(document.body)
+  })
+
+  it('moves focus to the Income heading after assigning the last unassigned credit', async () => {
+    const db = await freshDb({ streams: [SALARY] })
+    const user = await setup(db, [tx({ description: 'ONE OFF PAY', amountPence: 5000 })])
+    const row = (await screen.findByText('ONE OFF PAY')).closest('li')!
+    await user.click(within(row).getByRole('button', { name: /Assign/ }))
+    await user.selectOptions(within(row).getByLabelText('Assign to stream'), 'Salary')
+    await user.click(within(row).getByRole('button', { name: 'Save' }))
+    await screen.findByText('Assigned.')
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Unassigned income')).not.toBeInTheDocument()
+      expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Income' }))
+    })
+  })
+})
+
+describe('Budget: small behaviours', () => {
+  it('draws an empty named bar for net refunds in a category with no limit', async () => {
+    const db = await freshDb()
+    await setup(db, [tx({ description: 'MOONPIG 1', amountPence: 1000, categoryId: 'gifts', isRefund: true })])
+    const bar = await screen.findByRole('progressbar', { name: 'Gifts' })
+    expect(bar).toHaveAttribute('aria-valuetext', 'Refunds £10.00')
+    expect(bar).toHaveAttribute('aria-valuenow', '0')
+  })
+
+  it('shows one message for an unreadable limit', async () => {
+    const db = await freshDb()
+    const user = await setup(db, [tx({ categoryId: 'travel' })])
+    await user.click(await rowButton('Travel'))
+    await user.type(await screen.findByLabelText('Set monthly limit'), 'abc')
+    await user.click(screen.getByRole('button', { name: 'Save limit' }))
+    await screen.findByRole('alert')
+    expect(screen.getAllByText(/Enter an amount like/)).toHaveLength(1)
+  })
+
+  it('offers no limit form on a removed category', async () => {
+    const db = await freshDb()
+    const user = await setup(db, [tx({ categoryId: 'gone', description: 'OLD SHOP' })])
+    await user.click(await rowButton('Unknown category'))
+    await screen.findByText('OLD SHOP')
+    expect(screen.queryByLabelText('Set monthly limit')).not.toBeInTheDocument()
+  })
+
+  it('does not count rows already in the chosen category as "other transactions"', async () => {
+    const db = await freshDb()
+    const user = await setup(db, [
+      tx({ description: 'ACME WIDGETS 1' }),
+      tx({ description: 'ACME WIDGETS 2', categoryId: 'entertainment' }),
+      tx({ description: 'ACME WIDGETS 3' }),
+    ])
+    await user.click(await rowButton('Uncategorised'))
+    const row = (await screen.findByText('ACME WIDGETS 1')).closest('li')!
+    await user.click(within(row).getByRole('button', { name: /Change category/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.selectOptions(within(dialog).getByLabelText('Category'), 'Gifts')
+    expect(within(dialog).getByText(/Also changes 2 other transactions/)).toBeInTheDocument()
+    await user.selectOptions(within(dialog).getByLabelText('Category'), 'Entertainment')
+    expect(within(dialog).getByText(/Also changes 1 other transaction /)).toBeInTheDocument()
+  })
+})
+
 describe('Budget: flags', () => {
   it('flips a credit to a refund from the income list, persists it, and the spend follows', async () => {
     const db = await freshDb()

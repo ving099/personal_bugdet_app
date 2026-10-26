@@ -328,6 +328,46 @@ describe('Savings pots', () => {
   })
 })
 
+describe('Debts: fix round', () => {
+  it('keeps an unsaved edit open on another row when a debt is deleted', async () => {
+    const db = await freshDb()
+    const user = await setup(db, { debts: two })
+    await user.click(await screen.findByRole('button', { name: 'Edit Loan' }))
+    await user.clear(screen.getByLabelText('Balance'))
+    await user.type(screen.getByLabelText('Balance'), '123')
+    await user.click(screen.getByRole('button', { name: 'Delete Visa' }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    await screen.findByText('Deleted Visa.')
+    expect(screen.getByLabelText('Balance')).toHaveValue('123')
+  })
+
+  it('announces the debt-free result when Extra per month is left, not on each keystroke', async () => {
+    const db = await freshDb()
+    const user = await setup(db, { debts: two })
+    await screen.findByText('Debt-free by January 2027')
+    const live = () => screen.getAllByRole('status').filter((e) => e.classList.contains('sr-only'))[0]
+    expect(live()).toHaveTextContent('')
+    await user.type(screen.getByLabelText('Extra per month'), '100')
+    expect(live()).toHaveTextContent('')
+    await user.tab()
+    expect(live()).toHaveTextContent('Debt-free by December 2026')
+  })
+
+  it('creates the settings row when flagging an emergency fund finds none', async () => {
+    const db = await freshDb()
+    const user = await setup(db)
+    await db.settings.clear()
+    await user.click(await screen.findByRole('button', { name: 'Add a savings pot' }))
+    await user.type(screen.getByLabelText('Pot name'), 'Buffer')
+    await user.type(screen.getByLabelText('Balance'), '100')
+    await user.click(screen.getByLabelText('This is my emergency fund'))
+    await user.click(screen.getByRole('button', { name: 'Add pot' }))
+    await screen.findByText('Saved Buffer.')
+    const [saved] = await db.savingsPots.toArray()
+    expect((await db.settings.get('main'))?.emergencyFundPotId).toBe(saved.id)
+  })
+})
+
 describe('Annual bills', () => {
   it('shows the due month and the monthly set-aside per bill and in total', async () => {
     const db = await freshDb()

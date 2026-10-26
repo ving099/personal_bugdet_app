@@ -82,12 +82,14 @@ interface MoneyInputProps {
   required?: boolean
   /** Show errors now (for example after a failed Next), not only after the field has been left. */
   showErrors?: boolean
+  /** The form shows its own message, so the field shows none. */
+  quiet?: boolean
 }
 
 /** Pounds as typed; parsed with `toPence` by the owner of the form. Shows an inline error, never throws. */
-export function MoneyInput({ label, value, onChange, hint, required = false, showErrors = false }: MoneyInputProps) {
+export function MoneyInput({ label, value, onChange, hint, required = false, showErrors = false, quiet = false }: MoneyInputProps) {
   const [touched, setTouched] = useState(false)
-  const error = touched || showErrors ? moneyFieldError(value, required) : undefined
+  const error = !quiet && (touched || showErrors) ? moneyFieldError(value, required) : undefined
   return (
     <Field label={label} hint={hint} error={error}>
       {(c) => (
