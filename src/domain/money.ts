@@ -1,19 +1,33 @@
 import type { Pence } from './types'
 
-/** Parse a money string or number (pounds) into integer pence. */
+export class MoneyParseError extends Error {
+  constructor(input: string | number) {
+    super(`Cannot parse money amount: ${JSON.stringify(input)}`)
+    this.name = 'MoneyParseError'
+  }
+}
+
+const MONEY_RE = /^(-?)£?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/
+
+/** Parse a money string or number (pounds) into integer pence. Throws MoneyParseError if unreadable. */
 export function toPence(input: string | number): Pence {
-  if (typeof input === 'number') return Math.round(input * 100)
+  if (typeof input === 'number') {
+    if (!Number.isFinite(input)) throw new MoneyParseError(input)
+    return Math.round(input * 100)
+  }
   let s = input.trim()
   let negative = false
   if (/^\(.*\)$/.test(s)) {
     negative = true
-    s = s.slice(1, -1)
+    s = s.slice(1, -1).trim()
   }
-  if (s.includes('-')) negative = true
-  s = s.replace(/[£,\s-]/g, '')
-  const n = Number(s)
-  if (s === '' || Number.isNaN(n)) return 0
-  const pence = Math.round(n * 100)
+  const m = MONEY_RE.exec(s)
+  if (!m) throw new MoneyParseError(input)
+  if (m[1] === '-') {
+    if (negative) throw new MoneyParseError(input)
+    negative = true
+  }
+  const pence = Number(m[2].replace(/,/g, '')) * 100 + Number((m[3] ?? '').padEnd(2, '0'))
   return negative ? -pence : pence
 }
 
@@ -27,7 +41,12 @@ export function formatGBP(p: Pence): string {
 /** Split total pence by weights using largest remainder; ties go to the lower index. Sums exactly. */
 export function splitPence(total: Pence, weights: number[]): Pence[] {
   const sum = weights.reduce((a, b) => a + b, 0)
-  if (weights.length === 0 || sum <= 0) return weights.map(() => 0)
+  if (weights.length === 0) throw new RangeError('splitPence: weights must not be empty')
+  if (weights.some((w) => w < 0)) throw new RangeError('splitPence: weights must not be negative')
+  if (sum === 0) {
+    if (total !== 0) throw new RangeError('splitPence: weights sum to zero but total is non-zero')
+    return weights.map(() => 0)
+  }
   const exact = weights.map((w) => (total * w) / sum)
   const parts = exact.map(Math.floor)
   let left = total - parts.reduce((a, b) => a + b, 0)
