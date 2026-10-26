@@ -3,25 +3,20 @@ import { merchantKey } from '../import/matching'
 
 /**
  * Category id for a description, or undefined when no rule matches.
- * Case-insensitive substring match; the longest matchText wins and, at equal
- * length, a learned rule beats a default one. Rules with empty matchText are ignored.
+ * Case-insensitive substring match. Precedence: any learned match beats any default
+ * match regardless of length; within the same source the longest matchText wins.
+ * Rules with empty matchText are ignored.
  */
 export function categorise(description: string, rules: Rule[]): string | undefined {
   const haystack = description.toLowerCase()
-  let best: Rule | undefined
+  const best: Partial<Record<Rule['source'], Rule>> = {}
   for (const rule of rules) {
     const text = rule.matchText.toLowerCase()
     if (text === '' || !haystack.includes(text)) continue
-    if (!best) {
-      best = rule
-      continue
-    }
-    const bestLen = best.matchText.length
-    if (text.length > bestLen || (text.length === bestLen && rule.source === 'learned' && best.source !== 'learned')) {
-      best = rule
-    }
+    const current = best[rule.source]
+    if (!current || text.length > current.matchText.length) best[rule.source] = rule
   }
-  return best?.categoryId
+  return (best.learned ?? best.default)?.categoryId
 }
 
 /** Builds a learned rule from a categorised description; throws if no merchant text remains. */

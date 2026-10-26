@@ -9,7 +9,7 @@ describe('categorise', () => {
   })
 
   it('learned rule beats a shorter default rule', () => {
-    const learned = learnRule('COSTA COFFEE 0912', 'miscellaneous')
+    const learned = learnRule('COSTA', 'miscellaneous')
     const rules = [...defaultRules, learned]
     expect(categorise('COSTA COFFEE', defaultRules)).toBe('eating-out')
     expect(categorise('COSTA COFFEE', rules)).toBe('miscellaneous')
@@ -29,6 +29,13 @@ describe('categorise', () => {
     const l: Rule = { id: 'l', matchText: 'costa', categoryId: 'gifts', source: 'learned' }
     expect(categorise('Costa', [l, d])).toBe('gifts')
     expect(categorise('Costa', [d, l])).toBe('gifts')
+  })
+
+  it('within the same source the longer matchText wins', () => {
+    const short: Rule = { id: 's', matchText: 'costa', categoryId: 'gifts', source: 'learned' }
+    const long: Rule = { id: 'l', matchText: 'costa coffee', categoryId: 'travel', source: 'learned' }
+    expect(categorise('COSTA COFFEE 12', [short, long])).toBe('travel')
+    expect(categorise('COSTA COFFEE 12', [long, short])).toBe('travel')
   })
 
   it('ignores rules with empty matchText', () => {
