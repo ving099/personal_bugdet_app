@@ -167,3 +167,37 @@ describe('Home in the app', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'How we got this number' })).toBeInTheDocument())
   })
 })
+
+describe('Home with refund-heavy or unusable data (review C1)', () => {
+  it('renders after importing a month where a refund outweighs spending, also after a reload', async () => {
+    const { importFiles } = await import('../../src/ui/screens/import/importDb')
+    const { applyProfile } = await import('../../src/import/profile')
+    const { parseCsv } = await import('../../src/import/csv')
+    const db = await freshDb()
+    await db.accounts.put({ id: 'cur', name: 'Current', bank: 'Bank', kind: 'current' })
+    const csv = 'Date,Description,Amount\n2026-09-01,JOHN LEWIS,-20.00\n2026-09-20,JOHN LEWIS,200.00\n2026-10-26,TESCO,-5.00\n'
+    const rows = applyProfile(parseCsv(csv), {
+      id: 'p', bank: 'X', dateFormat: 'YYYY-MM-DD', dateColumn: 0, descriptionColumn: 1, amountMode: 'single',
+      amountColumn: 2, signConvention: 'negativeIsOut', headerRows: 1,
+    }, 'cur')
+    await importFiles(db, [{ name: 'refund.csv', rows }])
+    expect((await db.transactions.toArray()).find((t) => t.amountPence === 20000)?.isRefund).toBe(true)
+    window.localStorage.setItem('budget.lastTab', 'home')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const first = render(<App db={db} />)
+    expect(await screen.findByRole('heading', { name: 'Invest this month' })).toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument()
+    first.unmount()
+    // A reload lands on the remembered tab again and still renders.
+    render(<App db={db} />)
+    expect(await screen.findByRole('heading', { name: 'Invest this month' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'October 2026' })).toBeInTheDocument()
+  })
+
+  it('says it could not work out a figure when the engines reject a stored value', async () => {
+    const db = await freshDb()
+    await setup(db, { txs: month, streams: [salary], debts: [{ ...visa, minimumPaymentPence: -100 }] })
+    expect(await screen.findByText("Couldn't work out a figure")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'See why' })).toBeInTheDocument()
+  })
+})

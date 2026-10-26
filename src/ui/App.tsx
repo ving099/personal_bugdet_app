@@ -4,6 +4,7 @@ import { openDb, type BudgetDB } from '../storage/db'
 import { seedDefaults } from '../storage/seed'
 import './theme.css'
 import EmptyState from './components/EmptyState'
+import ErrorBoundary from './components/ErrorBoundary'
 import {
   BudgetIcon, DebtsIcon, HomeIcon, ImportIcon, InvestIcon, SettingsIcon,
 } from './components/icons'
@@ -71,6 +72,15 @@ function rememberTab(tab: TabKey): void {
   }
 }
 
+/** After a crash the app reopens on Home, not on the screen that failed, so a reload cannot loop on it. */
+function forgetTab(): void {
+  try {
+    window.localStorage.removeItem(TAB_KEY)
+  } catch {
+    /* storage unavailable: convenience only */
+  }
+}
+
 function Loading() {
   return (
     <div className="loading" role="status">
@@ -110,7 +120,10 @@ function Shell() {
       <main className="main" id="main" tabIndex={-1}>
         <div className="content" role="tabpanel" id={panelId(tab)} aria-labelledby={tabId(tab)}>
           <h1 className="page-title">{current.label}</h1>
-          {SCREENS[tab](go)}
+          {/* Keyed by tab: switching tab clears an error, and the tabs stay usable while one shows. */}
+          <ErrorBoundary key={tab} onError={forgetTab} onGoToSettings={() => go('settings')}>
+            {SCREENS[tab](go)}
+          </ErrorBoundary>
         </div>
       </main>
     </div>
@@ -164,5 +177,10 @@ export default function App({ db: provided }: { db?: BudgetDB }) {
     )
   }
   if (state === 'loading') return <Loading />
-  return <Ready db={db} />
+  // Last line of defence for anything outside the tabbed screens (lock, wizard, shell): never a blank page.
+  return (
+    <ErrorBoundary onError={forgetTab} onGoToSettings={() => rememberTab('settings')}>
+      <Ready db={db} />
+    </ErrorBoundary>
+  )
 }

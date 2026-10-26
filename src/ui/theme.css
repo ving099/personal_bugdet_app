@@ -1827,3 +1827,32 @@ input {
 .budget .export-row {
   margin-top: 28px;
 }
+
+/* Error boundary: the friendly card shown instead of a blank page. */
+.crash {
+  display: grid;
+  place-items: start center;
+  padding: var(--space-gutter);
+}
+
+.crash-card {
+  width: 100%;
+  max-width: 480px;
+}
+
+.crash-title {
+  margin: 0 0 8px;
+  font-family: var(--font-head);
+  font-size: var(--fs-xl);
+  font-weight: 800;
+}
+
+.crash-body {
+  margin: 0 0 16px;
+}
+
+.crash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
