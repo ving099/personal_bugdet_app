@@ -87,8 +87,15 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
   // Pension
   const pensionWanted = Math.floor((budget * (settings.wrapperShares.pension ?? 0)) / 100)
   const pension = Math.min(pensionWanted, remainingPension)
-  const pensionNote =
-    pension < pensionWanted && limitsYear ? `Capped by remaining pension allowance for ${taxYear}` : undefined
+  let pensionNote: string | undefined
+  if (pension < pensionWanted && limitsYear) {
+    pensionNote =
+      allowance('pension') === 0
+        ? `No pension allowance for ${limitsYear}`
+        : remainingPension === 0
+          ? `Pension allowance used up for ${taxYear}`
+          : `Capped by remaining pension allowance for ${taxYear}`
+  }
 
   // ISA slot (LISA is carved from inside)
   const afterPension = budget - pension
@@ -114,7 +121,9 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
     if (lisa < isaSlot && limitsYear) {
       lisaNote =
         remainingLisa === 0
-          ? `LISA allowance used up for ${taxYear}`
+          ? allowance('lisa') === 0
+            ? `No LISA allowance for ${limitsYear}`
+            : `LISA allowance used up for ${taxYear}`
           : lisa === monthlyLisaRoom
             ? `Capped to spread remaining LISA allowance over ${monthsLeft} month${monthsLeft === 1 ? '' : 's'}`
             : undefined
