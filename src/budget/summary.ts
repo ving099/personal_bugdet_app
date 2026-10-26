@@ -83,15 +83,33 @@ function trailingNetAverage(
   return { averagePence: Math.round(sum(totals) / totals.length), monthsUsed: totals.length }
 }
 
-/** Trailing monthly average of Debt payments, with the same window and month rules as trailingSpend. */
+/**
+ * Trailing monthly average of Debt payments over the same window as trailingSpend. For debt payments a month with
+ * none is real data (a plan ended, or a one-off payoff), so the window total is divided by every month in the window
+ * that has data of either kind: net spending above zero (trailingSpend's months) or net Debt payments above zero.
+ * Pass `categories` so spending months are judged exactly as in trailingSpend.
+ */
 export function trailingDebtPayments(input: {
   asOfMonth: string
   startDay: number
   txs: Transaction[]
   accounts: Account[]
+  categories?: Category[]
   months?: number
 }): { averagePence: Pence; monthsUsed: number } {
-  return trailingNetAverage(input, (t) => debtPaymentPence(t, input.accounts))
+  parseMonth(input.asOfMonth)
+  assertStartDay(input.startDay)
+  const excluded = excludedSet(input.categories)
+  let total = 0
+  let monthsUsed = 0
+  for (const month of previousMonths(input.asOfMonth, input.months ?? WINDOW)) {
+    const rows = txsInMonth(input.txs, month, input.startDay)
+    const paid = sum(rows.map((t) => debtPaymentPence(t, input.accounts) ?? 0))
+    const spent = sum(rows.map((t) => classify(t, input.accounts, excluded)).filter((f) => f?.kind === 'spend').map((f) => f!.pence))
+    if (paid > 0 || spent > 0) monthsUsed += 1
+    if (paid > 0) total += paid
+  }
+  return { averagePence: monthsUsed === 0 ? 0 : Math.round(total / monthsUsed), monthsUsed }
 }
 
 /**

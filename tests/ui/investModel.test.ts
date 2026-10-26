@@ -379,6 +379,16 @@ describe('debt payments not on the Debts list (part 2, important 1)', () => {
     expect(investable(d)).toBe(base - 19000)
   })
 
+  it('a one-off £2,000 payoff spreads over the three months with data, not £2,000 a month (part 3)', () => {
+    const d = data({ txs: [...groceries, tx({ date: '2026-08-20', amountPence: -200000, description: 'KLARNA', categoryId: 'debt-payments' })] })
+    expect(investableInputFor(d, TODAY).unlistedDebtPence).toBe(66667)
+  })
+
+  it('a Klarna plan that ended in July counts a third of £40 (part 3)', () => {
+    const d = data({ txs: [...groceries, klarna[0]] })
+    expect(investableInputFor(d, TODAY).unlistedDebtPence).toBe(1333)
+  })
+
   it('shows its own line in "How we got this number" only when there is some', () => {
     const label = 'Debt payments not on your Debts list'
     const lines = breakdownLines(buildInvestView(data({ txs: [...groceries, ...klarna], debts: [loanDebt] }), TODAY))

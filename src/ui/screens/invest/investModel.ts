@@ -54,7 +54,7 @@ export function investableInputFor(
   const high = highAprDebts(data.debts, settings.aprThresholdPercent, today)
   const pot = settings.emergencyFundPotId ? data.pots.find((p) => p.id === settings.emergencyFundPotId) : undefined
   const debtMinimumsPence = sum(data.debts.map((d) => d.minimumPaymentPence))
-  const debtPaid = trailingDebtPayments({ asOfMonth: month, startDay, txs, accounts })
+  const debtPaid = trailingDebtPayments({ asOfMonth: month, startDay, txs, accounts, categories })
   const unlistedDebtPence = Math.max(0, debtPaid.averagePence - debtMinimumsPence)
   return {
     month,

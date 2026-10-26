@@ -351,6 +351,14 @@ describe('debt payments outside the Debts list (part 2, important 1)', () => {
     expect(trailingDebtPayments({ ...b, asOfMonth: '2026-10', txs })).toEqual({ averagePence: 4000, monthsUsed: 1 })
   })
 
+  it('a month with spending but no debt payment counts as a zero month (part 3)', () => {
+    const groceries = ['2026-07-05', '2026-08-05', '2026-09-05'].map((d) => tx(d, -30000, { categoryId: 'groceries-and-food' }))
+    const oneOff = trailingDebtPayments({ ...b, asOfMonth: '2026-10', txs: [...groceries, tx('2026-08-20', -200000, { categoryId: 'debt-payments' })] })
+    expect(oneOff).toEqual({ averagePence: 66667, monthsUsed: 3 })
+    const ended = trailingDebtPayments({ ...b, asOfMonth: '2026-10', txs: [...groceries, klarna('2026-07-03')] })
+    expect(ended).toEqual({ averagePence: 1333, monthsUsed: 3 })
+  })
+
   it('reports one month of Debt payments for the Budget line', () => {
     expect(monthDebtPayments({ ...b, month: '2026-09', txs: [klarna('2026-09-03'), loan('2026-09-04'), klarna('2026-10-03')] })).toBe(19000)
   })
