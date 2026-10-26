@@ -179,7 +179,7 @@ export default function App({ db: provided }: { db?: BudgetDB }) {
   if (state === 'loading') return <Loading />
   // Last line of defence for anything outside the tabbed screens (lock, wizard, shell): never a blank page.
   return (
-    <ErrorBoundary onError={forgetTab} onGoToSettings={() => rememberTab('settings')}>
+    <ErrorBoundary standalone onError={forgetTab} onGoToSettings={() => rememberTab('settings')}>
       <Ready db={db} />
     </ErrorBoundary>
   )

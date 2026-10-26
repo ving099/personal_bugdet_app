@@ -8,6 +8,8 @@ interface Props {
   onGoToSettings: () => void
   /** Called when an error is caught, before the card shows. Used to forget the remembered tab. */
   onError?: () => void
+  /** True at the top level, outside the app's page layout: the card brings its own page margin and landmark. */
+  standalone?: boolean
 }
 
 interface State {
@@ -38,8 +40,9 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (!this.state.error) return this.props.children
+    const Wrap = this.props.standalone ? 'main' : 'div'
     return (
-      <div className="crash">
+      <Wrap className={this.props.standalone ? 'crash crash-standalone' : 'crash'}>
         <Card className="crash-card" labelledBy="crash-heading">
           <h2 className="crash-title" id="crash-heading">Something went wrong</h2>
           <p className="crash-body">
@@ -51,7 +54,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             <Button variant="secondary" onClick={this.settings}>Go to Settings</Button>
           </div>
         </Card>
-      </div>
+      </Wrap>
     )
   }
 }

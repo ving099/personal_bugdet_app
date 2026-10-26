@@ -1834,9 +1834,10 @@ input {
 }
 
 /* Error boundary: the friendly card shown instead of a blank page. */
-.crash {
+.crash-standalone {
   display: grid;
   place-items: start center;
+  min-height: 100dvh;
   padding: var(--space-gutter);
 }
 
