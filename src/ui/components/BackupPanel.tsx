@@ -193,7 +193,7 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
           busy={restoring || encrypting}
         >
           <p>
-            Restoring replaces all data on this device, including your budget, transactions, settings and passcode, with the
+            Restoring replaces all data on this device, including your budget, transactions, and settings (your app lock stays as it is), with the
             contents of {file?.name ?? 'the backup'}. It can&apos;t be undone. If you may want what is here now, make a backup first.
           </p>
         </ConfirmDialog>
