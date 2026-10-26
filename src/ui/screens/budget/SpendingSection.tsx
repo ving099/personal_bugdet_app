@@ -94,6 +94,10 @@ export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, 
           />
         ))}
       </ul>
+      <p className="import-hint">
+        Debt payments, saving and investing, and transfers are not counted as spending. Your debt minimums and the
+        Invest plan already allow for them.
+      </p>
       {editing && (
         <RecategoriseDialog
           tx={editing}

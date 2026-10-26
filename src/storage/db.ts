@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { taxYearOfBudgetMonth } from '../domain/dates'
+import { NON_SPENDING_CATEGORY_IDS } from '../seed/categories'
 import type {
   Account, AllowanceUsed, Category, Debt, Holding, ImportProfile, IncomeStream,
   InvestmentLog, OpeningHolding, Platform, Rule, SavingsPot, Settings, SinkingFund, Transaction,
@@ -47,6 +48,13 @@ export class BudgetDB extends Dexie {
       const startDay = settings?.budgetMonthStartDay ?? 1
       await tx.table<InvestmentLog, string>('investmentLog').toCollection().modify((row) => {
         if (!row.taxYear) row.taxYear = taxYearOfBudgetMonth(row.month, startDay)
+      })
+    })
+    // v3: Debt payments, Savings and investing and Income are not spending (see NON_SPENDING_CATEGORY_IDS).
+    // Only the flag changes; limits and names the owner edited are kept.
+    this.version(3).stores({}).upgrade(async (tx) => {
+      await tx.table<Category, string>('categories').where('id').anyOf([...NON_SPENDING_CATEGORY_IDS]).modify((row) => {
+        row.excludedFromSpending = true
       })
     })
   }

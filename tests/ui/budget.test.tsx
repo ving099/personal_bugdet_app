@@ -140,6 +140,20 @@ describe('Budget: categories and progress', () => {
     expect(spentFigure()).toBe('£10.00')
   })
 
+  it('hides Debt payments and Savings and investing, keeps them out of spent, and says why', async () => {
+    const db = await freshDb()
+    await setup(db, [
+      tx({ amountPence: -15000, categoryId: 'debt-payments', description: 'LOAN REPAYMENT' }),
+      tx({ amountPence: -10000, categoryId: 'savings-and-investing', description: 'TRADING 212' }),
+      tx({ amountPence: -1000, categoryId: 'travel', description: 'TRAIN' }),
+    ])
+    await screen.findByText('£10.00 spent')
+    expect(screen.queryByRole('button', { name: /^Debt payments/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Savings and investing/ })).not.toBeInTheDocument()
+    expect(spentFigure()).toBe('£10.00')
+    expect(screen.getByText(/Debt payments, saving and investing, and transfers are not counted as spending/)).toBeInTheDocument()
+  })
+
   it('lists Uncategorised first with a count and a hint', async () => {
     const db = await freshDb()
     await setup(db, [

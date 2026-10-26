@@ -311,3 +311,18 @@ describe('buildInvestView never throws on figures the engines reject', () => {
     })
   }
 })
+
+describe('investableInputFor: debt payments are not double-counted (review I1)', () => {
+  it('leaves a loan direct debit filed under Debt payments out of spendPence; the minimum covers it', () => {
+    const d = data({
+      txs: [
+        tx({ date: '2026-09-01', amountPence: -15000, description: 'LOAN REPAYMENT', categoryId: 'debt-payments' }),
+        tx({ date: '2026-09-10', amountPence: -40000, categoryId: 'groceries-and-food' }),
+      ],
+      debts: [debt({ kind: 'loan', aprPercent: 5, minimumPaymentPence: 15000 })],
+    })
+    const { input } = investableInputFor(d, TODAY)
+    expect(input.spendPence).toBe(40000)
+    expect(input.debtMinimumsPence).toBe(15000)
+  })
+})

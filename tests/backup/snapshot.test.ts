@@ -121,4 +121,17 @@ describe('snapshot', () => {
     await expect(restoreSnapshot(dst, json)).rejects.toThrow()
     expect(await dump(dst)).toEqual(before)
   })
+
+  it('marks the non-spending seed categories when restoring a backup made before they were excluded', async () => {
+    await src.categories.update('debt-payments', { excludedFromSpending: false, monthlyLimitPence: 12300 })
+    await src.categories.update('income', { excludedFromSpending: false })
+    await src.categories.update('savings-and-investing', { excludedFromSpending: false })
+    await restoreSnapshot(dst, await exportSnapshot(src))
+    const debt = await dst.categories.get('debt-payments')
+    expect(debt?.excludedFromSpending).toBe(true)
+    expect(debt?.monthlyLimitPence).toBe(12300)
+    expect((await dst.categories.get('income'))?.excludedFromSpending).toBe(true)
+    expect((await dst.categories.get('savings-and-investing'))?.excludedFromSpending).toBe(true)
+    expect((await dst.categories.get('groceries-and-food'))?.excludedFromSpending).toBe(false)
+  })
 })

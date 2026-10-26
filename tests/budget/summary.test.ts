@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { previousMonths } from '../../src/budget/months'
 import { monthSummary, sinkingMonthlyPence, smoothedIncome, trailingSpend } from '../../src/budget/summary'
 import type { Account, Category, IncomeStream, Transaction } from '../../src/domain/types'
+import { seedCategories } from '../../src/seed/categories'
 
 const accounts: Account[] = [
   { id: 'cur', name: 'Current', bank: 'A', kind: 'current' },
@@ -269,5 +270,32 @@ describe('trailingSpend with net-refund months', () => {
       txs: [tx('2026-09-01', -5000), tx('2026-09-03', 2000, { isRefund: true })],
     })
     expect(r).toEqual({ averagePence: 3000, monthsUsed: 1 })
+  })
+})
+
+describe('seeded non-spending categories (review I1)', () => {
+  const seeded = { startDay: 1, accounts, categories: seedCategories, streams }
+  it('does not count a loan direct debit filed under Debt payments as spending', () => {
+    const txs = [tx('2026-09-01', -15000, { categoryId: 'debt-payments' }), tx('2026-09-05', -5000, { categoryId: 'groceries-and-food' })]
+    expect(trailingSpend({ ...seeded, asOfMonth: '2026-10', txs }).averagePence).toBe(5000)
+    expect(monthSummary({ ...seeded, month: '2026-09', txs }).totalSpentPence).toBe(5000)
+  })
+
+  it('does not count money sent to an investing platform as spending', () => {
+    const txs = [tx('2026-09-20', -10000, { categoryId: 'savings-and-investing' })]
+    expect(trailingSpend({ ...seeded, asOfMonth: '2026-10', txs })).toEqual({ averagePence: 0, monthsUsed: 0 })
+  })
+
+  it('still counts pay filed under Income as income', () => {
+    const txs = [tx('2026-09-28', 250000, { categoryId: 'income', incomeStreamId: 's1' })]
+    expect(monthSummary({ ...seeded, month: '2026-09', txs }).totalIncomePence).toBe(250000)
+    const r = smoothedIncome({ ...seeded, asOfMonth: '2026-10', txs })
+    expect(r.perStream.s1).toBe(200000)
+    expect(r.monthsUsed).toBe(1)
+  })
+
+  it('does not count money back from an investing platform as income', () => {
+    const txs = [tx('2026-09-28', 50000, { categoryId: 'savings-and-investing' })]
+    expect(monthSummary({ ...seeded, month: '2026-09', txs }).totalIncomePence).toBe(0)
   })
 })

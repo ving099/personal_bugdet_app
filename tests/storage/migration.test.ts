@@ -27,3 +27,31 @@ describe('schema v2', () => {
     expect(Object.fromEntries(rows.map((r) => [r.id, r.taxYear]))).toEqual({ a: '2026/27', b: '2025/26', c: '2030/31' })
   })
 })
+
+describe('schema v3', () => {
+  it('marks the seeded Debt payments, Savings and investing and Income categories as not spending, keeping limits', async () => {
+    const name = `migration-v3-${Date.now()}`
+    names.push(name)
+    const v2 = new Dexie(name)
+    v2.version(2).stores({ categories: 'id, name', settings: 'id', investmentLog: 'id, month' })
+    await v2.table('categories').bulkPut([
+      { id: 'debt-payments', name: 'Debt payments', monthlyLimitPence: 30000, excludedFromSpending: false },
+      { id: 'savings-and-investing', name: 'Savings and investing', monthlyLimitPence: 0, excludedFromSpending: false },
+      { id: 'income', name: 'Income', monthlyLimitPence: 0, excludedFromSpending: false },
+      { id: 'transfers', name: 'Transfers', monthlyLimitPence: 0, excludedFromSpending: true },
+      { id: 'groceries-and-food', name: 'Groceries and food', monthlyLimitPence: 45000, excludedFromSpending: false },
+    ])
+    v2.close()
+
+    const db = openDb(name)
+    const rows = await db.categories.toArray()
+    db.close()
+    expect(Object.fromEntries(rows.map((r) => [r.id, [r.excludedFromSpending, r.monthlyLimitPence]]))).toEqual({
+      'debt-payments': [true, 30000],
+      'savings-and-investing': [true, 0],
+      income: [true, 0],
+      transfers: [true, 0],
+      'groceries-and-food': [false, 45000],
+    })
+  })
+})

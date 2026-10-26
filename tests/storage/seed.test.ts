@@ -18,6 +18,11 @@ describe('seedDefaults', () => {
     expect(transfers?.excludedFromSpending).toBe(true)
   })
 
+  it('seeds money that is not spending as excluded: debt payments, saving and investing, income, transfers', async () => {
+    const excluded = (await db.categories.toArray()).filter((c) => c.excludedFromSpending).map((c) => c.id).sort()
+    expect(excluded).toEqual(['debt-payments', 'income', 'savings-and-investing', 'transfers'])
+  })
+
   it('seeds the main settings row', async () => {
     expect(await db.settings.count()).toBe(1)
     const s = await db.settings.get('main')

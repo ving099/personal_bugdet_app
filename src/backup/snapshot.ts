@@ -1,4 +1,5 @@
-import type { Settings } from '../domain/types'
+import type { Category, Settings } from '../domain/types'
+import { withNonSpendingFlag } from '../seed/categories'
 import type { BudgetDB } from '../storage/db'
 
 const APP = 'budget'
@@ -36,7 +37,8 @@ const isRow = (r: unknown) => typeof r === 'object' && r !== null && !Array.isAr
 /**
  * Replaces ALL data in `db` with the snapshot, in one transaction. Validates before touching the db and
  * rolls back on any failure. Settings are replaced, except `appLock`: the device keeps its own app lock (or none),
- * whatever the file holds, and old files that carry one are ignored. Unknown tables are ignored; known tables missing from the snapshot become empty.
+ * whatever the file holds, and old files that carry one are ignored. The non-spending seed categories are marked
+ * as excluded (as the v3 migration does). Unknown tables are ignored; known tables missing from the snapshot become empty.
  */
 export async function restoreSnapshot(db: BudgetDB, json: string): Promise<void> {
   let parsed: unknown
@@ -65,7 +67,14 @@ export async function restoreSnapshot(db: BudgetDB, json: string): Promise<void>
     for (const t of db.tables) {
       await t.clear()
       const rows = rowsByTable.get(t.name) ?? []
-      await t.bulkAdd(t.name === 'settings' ? rows.map((r) => ({ ...(r as object), appLock: deviceLock })) : rows)
+      await t.bulkAdd(
+        t.name === 'settings'
+          ? rows.map((r) => ({ ...(r as object), appLock: deviceLock }))
+          : t.name === 'categories'
+            ? // Backups made before schema v3 carry the old flag on the non-spending seed categories.
+              rows.map((r) => withNonSpendingFlag(r as Category))
+            : rows,
+      )
     }
   })
 }

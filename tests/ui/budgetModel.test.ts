@@ -22,8 +22,10 @@ describe('buildBudgetRows', () => {
 
   it('lists every category that is not excluded, and never the excluded ones', () => {
     const rows = build({})
-    expect(rows).toHaveLength(seedCategories.length - 1)
-    expect(rows.some((r) => r.name === 'Transfers')).toBe(false)
+    expect(rows).toHaveLength(seedCategories.length - 4)
+    for (const name of ['Transfers', 'Debt payments', 'Savings and investing', 'Income']) {
+      expect(rows.some((r) => r.name === name)).toBe(false)
+    }
   })
 
   it('reports spent of limit, no limit, over and refund standings with exact text', () => {
