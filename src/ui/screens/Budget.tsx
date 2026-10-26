@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import { txsInMonth } from '../../budget/months'
-import { monthSummary } from '../../budget/summary'
+import { monthDebtPayments, monthSummary } from '../../budget/summary'
 import { budgetMonthOf } from '../../domain/dates'
 import type { ISODate } from '../../domain/types'
 import Card from '../components/Card'
@@ -23,6 +23,7 @@ export default function Budget({ today = todayISO() }: { today?: ISODate }) {
     categories: await db.categories.toArray(),
     streams: await db.incomeStreams.toArray(),
     txs: await db.transactions.toArray(),
+    debts: await db.debts.toArray(),
   }), [db])
   const [picked, setPicked] = useState<string | null>(null)
 
@@ -41,6 +42,8 @@ export default function Budget({ today = todayISO() }: { today?: ISODate }) {
       monthTxs,
       rows: buildBudgetRows({ spentByCategory: summary.spentByCategory, categories, monthTxs, accounts }),
       credits: unassignedCredits(monthTxs, accounts, categories),
+      debtPaymentsPence: monthDebtPayments({ month, startDay, txs, accounts }),
+      debtMinimumsPence: data.debts.reduce((a, d) => a + d.minimumPaymentPence, 0),
     }
   }, [data, month, startDay])
 
@@ -76,6 +79,8 @@ export default function Budget({ today = todayISO() }: { today?: ISODate }) {
         allTxs={data.txs}
         accounts={data.accounts}
         categories={data.categories}
+        debtPaymentsPence={view.debtPaymentsPence}
+        debtMinimumsPence={view.debtMinimumsPence}
       />
       <IncomeSection db={db} streams={data.streams} incomeByStream={summary.incomeByStream} credits={view.credits} />
       <ExportButton month={month} today={today} />

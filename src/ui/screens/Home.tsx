@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { txsInMonth } from '../../budget/months'
-import { monthSummary } from '../../budget/summary'
+import { monthDebtPayments, monthSummary } from '../../budget/summary'
 import type { ISODate } from '../../domain/types'
 import EmptyState from '../components/EmptyState'
 import ExportButton from '../components/ExportButton'
@@ -36,7 +36,11 @@ export default function Home({ today = todayISO(), onNavigate = () => {} }: Prop
       startDay,
       summary,
       debtPence: totalBalance(data.debts),
-      attention: attentionItems({ monthTxs, spentByCategory: summary.spentByCategory, accounts, categories, settings, today }),
+      attention: attentionItems({
+        monthTxs, spentByCategory: summary.spentByCategory, accounts, categories, settings, today,
+        debtPaymentsPence: monthDebtPayments({ month, startDay, txs, accounts }),
+        debtMinimumsPence: data.debts.reduce((a, d) => a + d.minimumPaymentPence, 0),
+      }),
       brandNew: txs.length === 0 && streams.length === 0 && data.debts.length === 0,
     }
   }, [live, today])

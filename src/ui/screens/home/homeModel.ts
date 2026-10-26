@@ -3,10 +3,10 @@ import type { Account, Category, ISODate, Pence, Settings, Transaction } from '.
 import { unmatchedCardRepayments } from '../../../import/matching'
 import { buildBudgetRows, UNCATEGORISED } from '../budget/budgetModel'
 
-export type HomeTarget = 'invest' | 'budget' | 'settings' | 'import'
+export type HomeTarget = 'invest' | 'budget' | 'settings' | 'import' | 'debts'
 
 export interface AttentionItem {
-  id: 'uncategorised' | 'backup' | 'card-repayments'
+  id: 'uncategorised' | 'backup' | 'card-repayments' | 'unlisted-debts'
   text: string
   action: string
   target: HomeTarget
@@ -22,6 +22,9 @@ export function attentionItems(input: {
   categories: Category[]
   settings: Settings
   today: ISODate
+  /** This month's Debt payments outflow and the minimums on the Debts list; flagged when payments are higher. */
+  debtPaymentsPence?: Pence
+  debtMinimumsPence?: Pence
 }): AttentionItem[] {
   const { monthTxs, spentByCategory, accounts, categories, settings, today } = input
   const items: AttentionItem[] = []
@@ -45,6 +48,15 @@ export function attentionItems(input: {
       text: `${plural(unmatched, 'card repayment has', 'card repayments have')} no matching payment into a card account. Import the card's statement, or mark it as a transfer in Budget.`,
       action: 'Open Budget',
       target: 'budget',
+    })
+  }
+
+  if ((input.debtPaymentsPence ?? 0) > (input.debtMinimumsPence ?? 0)) {
+    items.push({
+      id: 'unlisted-debts',
+      text: "Some debt payments aren't on your Debts list",
+      action: 'Open Debts',
+      target: 'debts',
     })
   }
 

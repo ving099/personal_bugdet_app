@@ -147,6 +147,17 @@ describe('review scenario', () => {
       asOfMonth: '2026-10', startDay: 25, txs: data.txs.filter((t) => t.description === 'LOAN REPAYMENT'), accounts, categories: data.categories,
     })
     expect(loanOnly).toEqual({ averagePence: 0, monthsUsed: 0 })
+    // The loan is on the Debts list, so it counts once, through its minimum.
+    expect(view.unlistedDebtPence).toBe(0)
+    // Without it on the list, the payments are taken off what can be invested instead (part 2, important 1).
+    await db.debts.delete('loan')
+    const unlisted = buildInvestView((await loadInvestData(db))!, TODAY)
+    expect(unlisted.input.debtMinimumsPence).toBe(0)
+    expect(unlisted.unlistedDebtPence).toBe(15000)
+    expect(unlisted.input.spendPence).toBe(view.input.spendPence + 15000)
+    // The unmatched £250 card repayment on 5 Oct sits in the 25 Sep - 24 Oct budget month, inside the window of
+    // three months with data, so Invest warns spending may be understated by about £83.33 a month.
+    expect(view.unmatchedRepaymentPence).toBe(8333)
   })
 
   it('refund-heavy history neither makes spending negative nor throws (C1)', async () => {

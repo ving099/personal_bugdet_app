@@ -139,6 +139,28 @@ describe('Home', () => {
     expect(onNavigate).toHaveBeenCalledWith('budget')
   })
 
+  it('flags debt payments that are not on the Debts list and links to Debts (part 2)', async () => {
+    const db = await freshDb()
+    const { user, onNavigate } = await setup(db, {
+      txs: [...month, tx({ description: 'KLARNA', amountPence: -4000, categoryId: 'debt-payments' })],
+      streams: [salary],
+    })
+    const list = await screen.findByRole('list', { name: 'Needs attention' })
+    await waitFor(() => expect(within(list).getByText("Some debt payments aren't on your Debts list")).toBeInTheDocument())
+    await user.click(within(list).getByRole('button', { name: 'Open Debts' }))
+    expect(onNavigate).toHaveBeenCalledWith('debts')
+  })
+
+  it('does not flag debt payments the Debts list minimums cover', async () => {
+    const db = await freshDb()
+    await setup(db, {
+      txs: [...month, tx({ description: 'KLARNA', amountPence: -2500, categoryId: 'debt-payments' })],
+      streams: [salary],
+      debts: [visa],
+    })
+    await waitFor(() => expect(screen.getByText('All caught up')).toBeInTheDocument())
+  })
+
   it('says All caught up when nothing needs attention', async () => {
     const db = await freshDb()
     await setup(db, { txs: month, streams: [salary] })

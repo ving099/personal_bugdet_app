@@ -164,6 +164,17 @@ describe('Budget: categories and progress', () => {
     expect(screen.queryByRole('button', { name: /^Savings and investing/ })).not.toBeInTheDocument()
     expect(spentFigure()).toBe('£10.00')
     expect(screen.getByText(/Debt payments, saving and investing, and transfers are not counted as spending/)).toBeInTheDocument()
+    expect(screen.queryByText(/already allow for them/)).not.toBeInTheDocument()
+  })
+
+  it('compares this month\'s debt payments with the Debts list minimums (part 2)', async () => {
+    const db = await freshDb()
+    await db.debts.put({ id: 'd', name: 'Loan', kind: 'loan', balancePence: 100000, creditLimitOrOriginalPence: 200000, aprPercent: 5, minimumPaymentPence: 15000 })
+    await setup(db, [
+      tx({ amountPence: -15000, categoryId: 'debt-payments', description: 'LOAN REPAYMENT' }),
+      tx({ amountPence: -4000, categoryId: 'debt-payments', description: 'KLARNA' }),
+    ])
+    expect(await screen.findByText('Debt payments £190.00 — covered by your debts list £150.00')).toBeInTheDocument()
   })
 
   it('lists Uncategorised first with a count and a hint', async () => {

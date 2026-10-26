@@ -1,3 +1,4 @@
+import { formatGBP } from '../../domain/money'
 import type { ISODate } from '../../domain/types'
 import { todayISO } from '../formValues'
 import Breakdown from './invest/Breakdown'
@@ -20,6 +21,11 @@ export default function Invest({ today = todayISO() }: { today?: ISODate }) {
     <div className="invest">
       <InvestHero view={view} />
       <Breakdown view={view} />
+      {view.unmatchedRepaymentPence > 0 && (
+        <p className="item-meta">
+          {`Your spending may be understated by about ${formatGBP(view.unmatchedRepaymentPence)} a month — card repayments with no card statement imported.`}
+        </p>
+      )}
       {investState(view.investable) === 'invest' && <PlanSection data={data} view={view} />}
       <LoggedSection view={view} holdings={data.holdings} />
       <DriftView view={view} bucketSplit={data.settings.bucketSplit} />

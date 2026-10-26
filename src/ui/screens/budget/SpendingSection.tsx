@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useDeferredFocus } from '../../useFocusFirst'
-import type { Account, Category, Transaction } from '../../../domain/types'
+import { formatGBP } from '../../../domain/money'
+import type { Account, Category, Pence, Transaction } from '../../../domain/types'
 import { similarTransactionIds, type BudgetRow } from './budgetModel'
 import { recategorise, setFlag, setLimit } from './budgetDb'
 import CategoryRow from './CategoryRow'
@@ -15,9 +16,14 @@ interface Props {
   allTxs: Transaction[]
   accounts: Account[]
   categories: Category[]
+  /** This month's Debt payments outflow, and the minimums on the Debts list. */
+  debtPaymentsPence: Pence
+  debtMinimumsPence: Pence
 }
 
-export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, categories }: Props) {
+export default function SpendingSection({
+  db, rows, monthTxs, allTxs, accounts, categories, debtPaymentsPence, debtMinimumsPence,
+}: Props) {
   const [openId, setOpenId] = useState<string | null>(null)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [busy, setBusy] = useState(false)
@@ -95,9 +101,14 @@ export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, 
         ))}
       </ul>
       <p className="import-hint">
-        Debt payments, saving and investing, and transfers are not counted as spending. Your debt minimums and the
-        Invest plan already allow for them.
+        Debt payments, saving and investing, and transfers are not counted as spending here. Payments for debts on your
+        Debts list are covered by their minimums; anything paid above those is taken off what you can invest.
       </p>
+      {(debtPaymentsPence > 0 || debtMinimumsPence > 0) && (
+        <p className="import-hint debt-cover">
+          {`Debt payments ${formatGBP(debtPaymentsPence)} — covered by your debts list ${formatGBP(debtMinimumsPence)}`}
+        </p>
+      )}
       {editing && (
         <RecategoriseDialog
           tx={editing}

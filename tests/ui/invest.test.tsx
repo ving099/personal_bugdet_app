@@ -55,6 +55,35 @@ async function setup(db: BudgetDB, opts: { streams?: IncomeStream[]; settings?: 
 
 const poundsToPence = (s: string) => Math.round(Number(s.replace(/[^0-9.-]/g, '')) * 100)
 
+const row = (p: Partial<Transaction>): Transaction => ({
+  id: `r${Math.random()}`, accountId: 'cur', date: '2026-09-10', amountPence: -1000, description: 'SHOP', fingerprint: `fp${Math.random()}`,
+  batchId: 'b', isTransfer: false, isRefund: false, ...p,
+})
+
+describe('Invest: notes about what the figure may miss (part 2)', () => {
+  it('says spending may be understated when card repayments have no card statement', async () => {
+    const db = await freshDb()
+    await setup(db, {
+      txs: [
+        row({ date: '2026-08-10', amountPence: -50000, categoryId: 'groceries-and-food' }),
+        row({ date: '2026-09-10', amountPence: -50000, categoryId: 'groceries-and-food' }),
+        row({ date: '2026-09-05', amountPence: -30000, description: 'BARCLAYCARD PAYMENT' }),
+      ],
+    })
+    expect(await screen.findByText(
+      'Your spending may be understated by about £150.00 a month — card repayments with no card statement imported.',
+    )).toBeInTheDocument()
+  })
+
+  it('shows debt payments not on the Debts list as their own line', async () => {
+    const db = await freshDb()
+    await setup(db, { txs: [row({ amountPence: -4000, description: 'KLARNA', categoryId: 'debt-payments' })] })
+    const list = screen.getByRole('list', { name: 'How we got this number' })
+    expect(await within(list).findByText('Debt payments not on your Debts list')).toBeInTheDocument()
+    expect(screen.queryByText(/may be understated/)).not.toBeInTheDocument()
+  })
+})
+
 describe('Invest: the plan', () => {
   it('shows plan lines that add up to the investable figure', async () => {
     const db = await freshDb()

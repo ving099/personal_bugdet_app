@@ -339,3 +339,67 @@ describe('buildInvestView honours the account order (review I4)', () => {
     expect(view.plan.lines[0].wrapper).toBe('isa')
   })
 })
+
+describe('debt payments not on the Debts list (part 2, important 1)', () => {
+  const months = ['2026-07-10', '2026-08-10', '2026-09-10']
+  const groceries = months.map((date) => tx({ date, amountPence: -50000, categoryId: 'groceries-and-food' }))
+  const klarna = months.map((date) => tx({ date, amountPence: -4000, description: 'KLARNA', categoryId: 'debt-payments' }))
+  const loan = months.map((date) => tx({ date, amountPence: -15000, description: 'LOAN REPAYMENT', categoryId: 'debt-payments' }))
+  const loanDebt = debt({ id: 'loan', kind: 'loan', aprPercent: 5, minimumPaymentPence: 15000 })
+  const klarnaDebt = debt({ id: 'klarna', kind: 'other', aprPercent: 0, minimumPaymentPence: 4000 })
+  const investable = (d: InvestData) => {
+    const v = buildInvestView(d, TODAY)
+    if (!v.investable.ok) throw new Error('expected a figure')
+    return v.investable.investablePence
+  }
+  const base = investable(data({ txs: groceries }))
+
+  it('with no debts entered, the whole £190 a month comes off the investable figure', () => {
+    const d = data({ txs: [...groceries, ...klarna, ...loan] })
+    const { input, unlistedDebtPence } = investableInputFor(d, TODAY)
+    expect(unlistedDebtPence).toBe(19000)
+    expect(input.spendPence).toBe(50000 + 19000)
+    expect(investable(d)).toBe(base - 19000)
+  })
+
+  it('after adding the loan (minimum £150), only the Klarna £40 is extra; the loan counts once', () => {
+    const d = data({ txs: [...groceries, ...klarna, ...loan], debts: [loanDebt] })
+    const { input, unlistedDebtPence } = investableInputFor(d, TODAY)
+    expect(unlistedDebtPence).toBe(4000)
+    expect(input.spendPence).toBe(54000)
+    expect(input.debtMinimumsPence).toBe(15000)
+    expect(investable(d)).toBe(base - 19000)
+  })
+
+  it('with both entered, nothing extra', () => {
+    const d = data({ txs: [...groceries, ...klarna, ...loan], debts: [loanDebt, klarnaDebt] })
+    const { input, unlistedDebtPence } = investableInputFor(d, TODAY)
+    expect(unlistedDebtPence).toBe(0)
+    expect(input.spendPence).toBe(50000)
+    expect(investable(d)).toBe(base - 19000)
+  })
+
+  it('shows its own line in "How we got this number" only when there is some', () => {
+    const label = 'Debt payments not on your Debts list'
+    const lines = breakdownLines(buildInvestView(data({ txs: [...groceries, ...klarna], debts: [loanDebt] }), TODAY))
+    expect(lines.find((l) => l.label === label)).toBeUndefined()
+    const withExtra = breakdownLines(buildInvestView(data({ txs: [...groceries, ...klarna] }), TODAY))
+    expect(withExtra.find((l) => l.label === label)?.pence).toBe(-4000)
+    expect(withExtra.find((l) => l.label === 'Spending (3-month average)')?.pence).toBe(-50000)
+    expect(withExtra.slice(0, -1).reduce((s, l) => s + l.pence, 0)).toBe(withExtra.at(-1)!.pence)
+  })
+})
+
+describe('understated spending note (part 2, minor 2)', () => {
+  it('reports the trailing monthly average of unmatched card repayments', () => {
+    const d = data({
+      txs: [
+        tx({ date: '2026-08-10', amountPence: -50000, categoryId: 'groceries-and-food' }),
+        tx({ date: '2026-09-10', amountPence: -50000, categoryId: 'groceries-and-food' }),
+        tx({ date: '2026-09-05', amountPence: -30000, description: 'BARCLAYCARD PAYMENT' }),
+      ],
+    })
+    expect(buildInvestView(d, TODAY).unmatchedRepaymentPence).toBe(15000)
+    expect(buildInvestView(data(), TODAY).unmatchedRepaymentPence).toBe(0)
+  })
+})

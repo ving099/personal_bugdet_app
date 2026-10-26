@@ -1,4 +1,6 @@
-import { sinkingMonthlyPence, smoothedIncome, trailingSpend } from '../../../budget/summary'
+import {
+  sinkingMonthlyPence, smoothedIncome, trailingDebtPayments, trailingSpend, trailingUnmatchedRepayments,
+} from '../../../budget/summary'
 import { highAprDebts } from '../../../debt/debt'
 import { budgetMonthOf, taxYearOf, taxYearOfBudgetMonth } from '../../../domain/dates'
 import type {
@@ -34,8 +36,16 @@ const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
  * The monthly figures computeInvestable needs, for the budget month containing `today`.
  * Spending and income come from the three budget months before it; `categories` is always passed so
  * excluded categories are ignored exactly as on the Budget tab.
+ *
+ * Debt payments are not spending (the category is excluded) because a debt on the Debts list is already counted
+ * once through its minimum. Payments for debts that are not on the list (Klarna, Clearpay, a loan not entered)
+ * would then count nowhere, so the part of the trailing Debt payments average above the listed minimums,
+ * `unlistedDebtPence` = max(0, average - minimums), is added to spendPence.
  */
-export function investableInputFor(data: InvestData, today: ISODate): { input: InvestableInput; month: string } {
+export function investableInputFor(
+  data: InvestData,
+  today: ISODate,
+): { input: InvestableInput; month: string; unlistedDebtPence: Pence } {
   const { settings, accounts, categories, streams, txs } = data
   const startDay = settings.budgetMonthStartDay
   const month = budgetMonthOf(today, startDay)
@@ -43,18 +53,22 @@ export function investableInputFor(data: InvestData, today: ISODate): { input: I
   const income = smoothedIncome({ asOfMonth: month, startDay, txs, accounts, streams, categories })
   const high = highAprDebts(data.debts, settings.aprThresholdPercent, today)
   const pot = settings.emergencyFundPotId ? data.pots.find((p) => p.id === settings.emergencyFundPotId) : undefined
+  const debtMinimumsPence = sum(data.debts.map((d) => d.minimumPaymentPence))
+  const debtPaid = trailingDebtPayments({ asOfMonth: month, startDay, txs, accounts })
+  const unlistedDebtPence = Math.max(0, debtPaid.averagePence - debtMinimumsPence)
   return {
     month,
+    unlistedDebtPence,
     input: {
       incomePence: income.totalPence,
-      spendPence: spend.averagePence,
+      spendPence: spend.averagePence + unlistedDebtPence,
       sinkingPence: sinkingMonthlyPence(data.funds),
-      debtMinimumsPence: sum(data.debts.map((d) => d.minimumPaymentPence)),
+      debtMinimumsPence,
       highAprPayoffCapacityPence: sum(high.map((d) => d.balancePence)),
       emergencyGapPence: pot ? Math.max(0, pot.targetPence - pot.balancePence) : 0,
       bufferPercent: settings.bufferPercent,
       emergencyTopUpSharePercent: settings.emergencyTopUpSharePercent,
-      monthsOfHistory: Math.max(spend.monthsUsed, income.monthsUsed),
+      monthsOfHistory: Math.max(spend.monthsUsed, debtPaid.monthsUsed, income.monthsUsed),
     },
   }
 }
@@ -77,6 +91,10 @@ export interface InvestView {
   month: string
   taxYear: string
   input: InvestableInput
+  /** Part of input.spendPence that is debt payments beyond the listed minimums (see investableInputFor). */
+  unlistedDebtPence: Pence
+  /** About how much spending is understated each month by card repayments with no card statement (0 when none). */
+  unmatchedRepaymentPence: Pence
   investable: InvestableResult
   wrappers: WrapperAllocation[]
   plan: MonthlyPlan
@@ -142,6 +160,12 @@ function invalidDataView(data: InvestData, today: ISODate): InvestView {
   } catch {
     /* the figures themselves could not be read; show none */
   }
+  let unmatchedRepaymentPence = 0
+  try {
+    unmatchedRepaymentPence = unmatchedFor(data, month)
+  } catch {
+    /* the figures themselves could not be read; show none */
+  }
   const investable: InvestableResult = { ok: false, reason: 'invalid-data', lines: [], biggestDrainLabel: '' }
   const noDrift: DriftReport = { growthPct: 0, aggressivePct: 0, underweight: null, biasNote: '' }
   let drift = noDrift
@@ -162,13 +186,19 @@ function invalidDataView(data: InvestData, today: ISODate): InvestView {
   // Every logged line for this month stays listed, so it can still be corrected or undone.
   const otherLogged = data.log.filter((l) => l.month === month)
   return {
-    month, taxYear, input, investable, wrappers: [], plan, groups: [], logged: new Map(), otherLogged, drift, planDrift,
+    month, taxYear, input, unlistedDebtPence: 0, unmatchedRepaymentPence, investable, wrappers: [], plan, groups: [],
+    logged: new Map(), otherLogged, drift, planDrift,
   }
+}
+
+function unmatchedFor(data: InvestData, month: string): Pence {
+  const { settings, txs, accounts, categories } = data
+  return trailingUnmatchedRepayments({ asOfMonth: month, startDay: settings.budgetMonthStartDay, txs, accounts, categories })
 }
 
 function computeInvestView(data: InvestData, today: ISODate): InvestView {
   const { settings } = data
-  const { input, month } = investableInputFor(data, today)
+  const { input, month, unlistedDebtPence } = investableInputFor(data, today)
   const taxYear = taxYearOf(today)
   const investable = computeInvestable(input)
   const log = withTaxYears(data.log, settings.budgetMonthStartDay)
@@ -196,7 +226,8 @@ function computeInvestView(data: InvestData, today: ISODate): InvestView {
     else otherLogged.push(l)
   }
   return {
-    month, taxYear, input, investable, wrappers, plan, groups, logged, otherLogged,
+    month, taxYear, input, unlistedDebtPence, unmatchedRepaymentPence: unmatchedFor(data, month), investable, wrappers, plan,
+    groups, logged, otherLogged,
     drift: driftReport({ ...base, log }), planDrift: startOfMonth,
   }
 }
@@ -230,13 +261,24 @@ export interface BreakdownLine {
 }
 
 /** "How we got this number": income, each deduction from computeInvestable, then what is left to invest. */
-export function breakdownLines(view: Pick<InvestView, 'input' | 'investable'>): BreakdownLine[] {
+export const UNLISTED_DEBT_LABEL = 'Debt payments not on your Debts list'
+
+export function breakdownLines(view: Pick<InvestView, 'input' | 'investable'> & { unlistedDebtPence?: Pence }): BreakdownLine[] {
   const { input, investable } = view
+  const unlisted = view.unlistedDebtPence ?? 0
   // No trustworthy figures to break down.
   if (!investable.ok && investable.reason === 'invalid-data') return []
   const lines: BreakdownLine[] = [
     { label: 'Income (expected, or your 3-month average if lower)', pence: input.incomePence },
-    ...investable.lines.map((l) => ({ label: displayLabel(l.label, input), pence: -l.pence })),
+    // The spending line is shown without the unlisted debt payments, which get their own line just after it.
+    ...investable.lines.flatMap((l) =>
+      l.label === 'Spending (3-month average)' && unlisted > 0
+        ? [
+            { label: displayLabel(l.label, input), pence: -(l.pence - unlisted) },
+            { label: UNLISTED_DEBT_LABEL, pence: -unlisted },
+          ]
+        : [{ label: displayLabel(l.label, input), pence: -l.pence }],
+    ),
   ]
   if (investable.ok) lines.push({ label: 'Invest this month', pence: investable.investablePence, total: true })
   else lines.push({ label: 'Shortfall this month', pence: lines.reduce((s, l) => s + l.pence, 0), total: true })
