@@ -27,7 +27,7 @@ function SinkingForm({ fund, busy, error, onSave, onCancel }: {
   const monthly = monthlySetAside(draft.yearly)
   return (
     <ItemForm
-      title={fund ? `Edit ${fund.name}` : 'Add an annual bill'}
+      title={fund ? `Edit ${fund.name}` : 'Add a yearly bill'}
       submitLabel={fund ? 'Save changes' : 'Add bill'}
       busy={busy}
       error={error || (attempted && !valid ? 'Fix the highlighted fields to continue.' : undefined)}
@@ -53,10 +53,10 @@ export default function SinkingSection({ db, funds }: { db: BudgetDB; funds: Sin
   return (
     <section className="import-section" aria-labelledby="annual-heading">
       <h2 className="import-heading" id="annual-heading" tabIndex={-1}>
-        Annual bills
+        Yearly bills
       </h2>
       <div role="status" className="result-line">{crud.notice}</div>
-      {funds.length === 0 && <p className="import-hint">No annual bills yet. Add insurance or car tax and the app sets aside a twelfth each month.</p>}
+      {funds.length === 0 && <p className="import-hint">No yearly bills yet. Add insurance or car tax and the app sets aside a twelfth each month.</p>}
       <ul className="item-list">
         {funds.map((f) => (
           <li key={f.id} className="debt">
@@ -89,14 +89,14 @@ export default function SinkingSection({ db, funds }: { db: BudgetDB; funds: Sin
       )}
       <Button variant="secondary" id="add-bill" aria-expanded={crud.editing === 'new'}
         onClick={() => (crud.editing === 'new' ? crud.close('add-bill') : crud.open('new'))}>
-        Add an annual bill
+        Add a yearly bill
       </Button>
       {crud.editing === 'new' && <SinkingForm busy={crud.busy} error={crud.error} onSave={(x) => void crud.save(x)} onCancel={() => crud.close('add-bill')} />}
       {crud.deleting && (
         <ConfirmDialog title={`Delete ${crud.deleting.name}?`} confirmLabel="Delete" busy={crud.busy} error={crud.deleteError}
           fallbackFocusId="annual-heading" onCancel={() => { crud.setDeleting(null); crud.setDeleteError('') }}
           onConfirm={() => void crud.confirmDelete()}>
-          This removes the annual bill. It cannot be undone.
+          This removes the yearly bill. It cannot be undone.
         </ConfirmDialog>
       )}
     </section>

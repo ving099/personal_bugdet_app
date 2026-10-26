@@ -100,7 +100,7 @@ describe('month-end spreadsheet', () => {
     expect(downloads[0].blob.type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     const names = await sheetNames(downloads[0])
     expect(names).toHaveLength(7)
-    expect(names).toEqual(expect.arrayContaining(['Summary', 'Transactions', 'Budget vs Actual', 'Investment Plan']))
+    expect(names).toEqual(expect.arrayContaining(['Summary', 'Transactions', 'Budget vs actual', 'Investment plan']))
     await waitFor(() => expect(revoked).toContain(downloads[0].url), { timeout: 3000 })
   })
 

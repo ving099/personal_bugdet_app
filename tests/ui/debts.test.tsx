@@ -387,7 +387,7 @@ describe('Debts: fix round', () => {
   })
 })
 
-describe('Annual bills', () => {
+describe('Yearly bills', () => {
   it('shows the due month and the monthly set-aside per bill and in total', async () => {
     const db = await freshDb()
     await setup(db, { funds: [fund({}), fund({ id: 'f2', name: 'Car tax', yearlyAmountPence: 24000, dueMonth: 11 })] })
@@ -402,8 +402,9 @@ describe('Annual bills', () => {
   it('adds, edits and deletes a bill', async () => {
     const db = await freshDb()
     const user = await setup(db)
-    await waitFor(() => expect(screen.getByText(/No annual bills yet/)).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Add an annual bill' }))
+    await waitFor(() => expect(screen.getByText(/No yearly bills yet/)).toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Yearly bills' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add a yearly bill' }))
     await user.type(screen.getByLabelText('Bill name'), 'Boiler cover')
     await user.type(screen.getByLabelText('Yearly amount'), '240')
     await user.selectOptions(screen.getByLabelText('Due month'), 'June')

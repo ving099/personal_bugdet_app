@@ -110,7 +110,7 @@ function txSheet(wb: ExcelJS.Workbook, d: ExportData) {
 }
 
 function budgetSheet(wb: ExcelJS.Workbook, d: ExportData) {
-  const ws = wb.addWorksheet('Budget vs Actual')
+  const ws = wb.addWorksheet('Budget vs actual')
   setup(ws, ['Category', 'Budgeted', 'Actual', 'Difference'], [28, 14, 14, 14])
   const spent = d.summary.spentByCategory
   const rows = d.categories
@@ -137,7 +137,7 @@ function budgetSheet(wb: ExcelJS.Workbook, d: ExportData) {
 }
 
 function incomeSheet(wb: ExcelJS.Workbook, d: ExportData) {
-  const ws = wb.addWorksheet('Income by Stream')
+  const ws = wb.addWorksheet('Income by stream')
   setup(ws, ['Stream', 'Amount'], [28, 14])
   const names = new Map(d.streams.map((s) => [s.id, s.label]))
   const entries = Object.entries(d.summary.incomeByStream)
@@ -175,7 +175,7 @@ function debtSheet(wb: ExcelJS.Workbook, d: ExportData) {
 }
 
 function savingsSheet(wb: ExcelJS.Workbook, d: ExportData) {
-  const ws = wb.addWorksheet('Savings and Sinking Funds')
+  const ws = wb.addWorksheet('Savings and yearly bills')
   setup(ws, ['Savings pot', 'Balance', 'Target'], [28, 16, 16])
   for (const p of d.savings) {
     const r = ws.addRow([text(p.name)])
@@ -187,7 +187,7 @@ function savingsSheet(wb: ExcelJS.Workbook, d: ExportData) {
     3: sumPence(d.savings.map((p) => p.targetPence || 0)),
   })
   const h = ws.getRow(t + 2)
-  h.values = ['Sinking fund', 'Yearly amount', 'Monthly set-aside']
+  h.values = ['Yearly bill', 'Yearly amount', 'Monthly set-aside']
   h.font = { bold: true }
   const first = t + 3
   d.sinking.forEach((f, i) => {
@@ -206,7 +206,7 @@ function savingsSheet(wb: ExcelJS.Workbook, d: ExportData) {
 }
 
 function planSheet(wb: ExcelJS.Workbook, d: ExportData) {
-  const ws = wb.addWorksheet('Investment Plan')
+  const ws = wb.addWorksheet('Investment plan')
   ;[26, 22, 28, 16].forEach((w, i) => { ws.getColumn(i + 1).width = w })
   const hname = new Map((d.holdings ?? []).map((h) => [h.id, h.exampleName]))
   const pname = new Map((d.platforms ?? []).map((p) => [p.id, p.name]))
@@ -285,9 +285,9 @@ export async function buildWorkbook(data: ExportData): Promise<Uint8Array> {
   summary.getColumn(2).width = 28
   summary.addRow(['Month', text(data.monthText ?? data.month)]).font = { bold: true }
   summary.addRow(['Total income'])
-  formula(summary.getCell('B2'), `'Income by Stream'!B${totalIncomeRow}`, pounds(s.totalIncomePence))
+  formula(summary.getCell('B2'), `'Income by stream'!B${totalIncomeRow}`, pounds(s.totalIncomePence))
   summary.addRow(['Total spent'])
-  formula(summary.getCell('B3'), `'Budget vs Actual'!C${totalSpentRow}`, pounds(s.totalSpentPence))
+  formula(summary.getCell('B3'), `'Budget vs actual'!C${totalSpentRow}`, pounds(s.totalSpentPence))
   summary.addRow(['Left to invest-or-save'])
   formula(summary.getCell('B4'), 'B2-B3', pounds(s.leftPence))
 

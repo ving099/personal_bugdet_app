@@ -11,7 +11,7 @@ export const WIZARD_STEPS = [
   'Income streams',
   'Debts',
   'Savings pots',
-  'Sinking funds',
+  'Yearly bills',
   'Allowances used this tax year',
   'Opening holdings',
   'Settings basics',

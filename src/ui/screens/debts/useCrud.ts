@@ -6,7 +6,7 @@ interface Ops<T> {
   remove: (item: T) => Promise<unknown>
 }
 
-/** Add / edit / delete state shared by the debts, pots and annual bills lists. */
+/** Add / edit / delete state shared by the debts, pots and yearly bills lists. */
 export function useCrud<T extends { id: string; name: string }>(ops: Ops<T>, ids: { heading: string; add: string }) {
   /** An item id, 'new', or null when no form is open. */
   const [editing, setEditing] = useState<string | null>(null)

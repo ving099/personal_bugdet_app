@@ -8,7 +8,7 @@ A private budgeting and investing-suggestions app for UK households. It runs in 
 - **Categorise** spending: rules place transactions automatically, and on the Budget tab you can pick a category for anything left uncategorised.
 - **Budget** the month against your planned amounts, with debts, savings pots and sinking funds alongside.
 - **Invest** shows what you can afford to invest this month, split across tax wrappers (pension, ISA, optionally Lifetime ISA, and general account) and a list of example funds. You tick lines off as you buy them, and your remaining allowances update.
-- **Month-end spreadsheet** with seven sheets (Summary, Transactions, Budget vs Actual, Income by Stream, Debts, Savings and Sinking Funds, Investment Plan).
+- **Month-end spreadsheet** with seven sheets (Summary, Transactions, Budget vs actual, Income by stream, Debts, Savings and yearly bills, Investment plan).
 
 The investing suggestions are generated from your own numbers by the rules in the app. The Invest tab carries one line: "Starting rules, not personal advice. Check each fund's key information document and your platform's availability before buying."
 

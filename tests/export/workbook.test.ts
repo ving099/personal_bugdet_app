@@ -75,7 +75,7 @@ describe('buildWorkbook', () => {
   it('has seven sheets in order', async () => {
     const wb = await load(data())
     expect(wb.worksheets.map((w) => w.name)).toEqual([
-      'Summary', 'Transactions', 'Budget vs Actual', 'Income by Stream', 'Debts', 'Savings and Sinking Funds', 'Investment Plan',
+      'Summary', 'Transactions', 'Budget vs actual', 'Income by stream', 'Debts', 'Savings and yearly bills', 'Investment plan',
     ])
   })
 
@@ -109,7 +109,7 @@ describe('buildWorkbook', () => {
   })
 
   it('budget vs actual has cached differences', async () => {
-    const ws = (await load(data())).getWorksheet('Budget vs Actual')!
+    const ws = (await load(data())).getWorksheet('Budget vs actual')!
     const g = find(ws, 'Groceries')!
     expect(g.getCell(2).value).toBe(300)
     expect(g.getCell(3).value).toBe(250)
@@ -119,7 +119,7 @@ describe('buildWorkbook', () => {
   })
 
   it('income by stream names unassigned', async () => {
-    const ws = (await load(data())).getWorksheet('Income by Stream')!
+    const ws = (await load(data())).getWorksheet('Income by stream')!
     expect(find(ws, 'Salary')!.getCell(2).value).toBe(3000)
     expect(find(ws, 'Unassigned')!.getCell(2).value).toBe(40)
     expect(find(ws, 'Total')!.getCell(2).result).toBe(3040)
@@ -139,16 +139,17 @@ describe('buildWorkbook', () => {
   })
 
   it('savings and sinking funds', async () => {
-    const ws = (await load(data())).getWorksheet('Savings and Sinking Funds')!
+    const ws = (await load(data())).getWorksheet('Savings and yearly bills')!
     expect(find(ws, 'Rainy')!.getCell(2).value).toBe(1500)
     const fund = find(ws, 'Car tax')!
     expect(fund.getCell(2).value).toBe(1200)
     expect(fund.getCell(3).value).toBe(100)
     expect(fund.getCell(3).numFmt).toBe('£#,##0.00')
+    expect(find(ws, 'Yearly bill')!.getCell(2).value).toBe('Yearly amount')
   })
 
   it('investment plan shows lines, warnings, allowances and the month log', async () => {
-    const ws = (await load(data())).getWorksheet('Investment Plan')!
+    const ws = (await load(data())).getWorksheet('Investment plan')!
     const texts: unknown[] = []
     ws.eachRow((r) => r.eachCell((c) => texts.push(c.value)))
     expect(texts).toContain('a warning')
@@ -162,7 +163,7 @@ describe('buildWorkbook', () => {
 
   it('shows reason when plan is not ok', async () => {
     const plan = { ...okPlan, ok: false, reason: 'no-surplus' as const, lines: [], holdings: [] }
-    const ws = (await load(data({ plan }))).getWorksheet('Investment Plan')!
+    const ws = (await load(data({ plan }))).getWorksheet('Investment plan')!
     const texts: unknown[] = []
     ws.eachRow((r) => r.eachCell((c) => texts.push(String(c.value))))
     expect(texts.some((t) => t.includes('Nothing is left to invest this month'))).toBe(true)
@@ -192,7 +193,7 @@ describe('buildWorkbook', () => {
       monthText: '25 Sep 2026 to 24 Oct 2026',
     })
     const wb = await load(d)
-    const bva = wb.getWorksheet('Budget vs Actual')!
+    const bva = wb.getWorksheet('Budget vs actual')!
     expect(find(bva, 'Transfers')).toBeUndefined()
     expect(find(bva, 'Empty')).toBeUndefined()
     const names: unknown[] = []
@@ -203,7 +204,7 @@ describe('buildWorkbook', () => {
     expect(find(debtsWs, 'Card')!.getCell(2).value).toBe('Credit card')
     expect(find(debtsWs, 'Loan')!.getCell(2).value).toBe('Loan')
     expect(find(debtsWs, 'Card')!.getCell(5).value).toBeCloseTo(0.229)
-    const plan = wb.getWorksheet('Investment Plan')!
+    const plan = wb.getWorksheet('Investment plan')!
     const texts: unknown[] = []
     plan.eachRow((r) => r.eachCell((c) => texts.push(c.value)))
     expect(texts).toEqual(expect.arrayContaining(['Hargreaves Lansdown', 'Growth', 'Used this tax year (to date)']))
@@ -222,9 +223,9 @@ describe('buildWorkbook', () => {
     const summary = monthSummary({ month: '2026-10', startDay: 1, txs: [], accounts: [], categories: [], streams: [] })
     const wb = await load(data({ summary, txs: [], categories: [], streams: [], debts: [], savings: [], sinking: [], plan: null, log: [], accounts: [] }))
     expect(wb.worksheets).toHaveLength(7)
-    const ws = wb.getWorksheet('Investment Plan')!
+    const ws = wb.getWorksheet('Investment plan')!
     expect(find(ws, 'A plan is only worked out for the current budget month.')).toBeTruthy()
     expect(find(wb.getWorksheet('Debts')!, 'Total')!.getCell(3).result).toBe(0)
-    expect(find(wb.getWorksheet('Income by Stream')!, 'Total')!.getCell(2).result).toBe(0)
+    expect(find(wb.getWorksheet('Income by stream')!, 'Total')!.getCell(2).result).toBe(0)
   })
 })

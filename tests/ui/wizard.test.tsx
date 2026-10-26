@@ -45,7 +45,7 @@ describe('Setup wizard', () => {
     renderWizard(await freshDb())
     await waitFor(() => expect(screen.getByText('Step 1 of 8')).toBeInTheDocument())
     await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Accounts' })).toBeInTheDocument())
-    const titles = ['Income streams', 'Debts', 'Savings pots', 'Sinking funds', 'Allowances used this tax year',
+    const titles = ['Income streams', 'Debts', 'Savings pots', 'Yearly bills', 'Allowances used this tax year',
       'Opening holdings', 'Settings basics']
     for (const [i, title] of titles.entries()) {
       await user.click(screen.getByRole('button', { name: 'Next' }))
