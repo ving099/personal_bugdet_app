@@ -30,7 +30,13 @@ export interface WrapperAllocation {
  *
  * Output is always [pension, isa, (lisa), gia]; `settings.wrapperOrder` is not used for
  * ordering because the allocation order is fixed by the rules above.
- * A tax year with no configured allowance is treated as zero room.
+ *
+ * Allowance lookup: if `allowances` has an entry for the current tax year it is used as is
+ * (a wrapper missing or 0 inside a configured year means zero room). If the year is missing,
+ * the latest configured year at or before it (by starting year) supplies the limits and the
+ * pension/ISA/LISA entries carry a "not set; using X limits" note. If no earlier year exists,
+ * room is zero and those entries say no allowances are configured.
+ * `wrapperShares.pension` / `.lisa`, when given, must be finite numbers in 0..100.
  */
 export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocation[] {
   const { investablePence, today, settings, used, lisaEnabled } = input
@@ -45,8 +51,32 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
 
   const taxYear = taxYearOf(today)
   const monthsLeft = monthsLeftInTaxYear(today)
+  for (const w of ['pension', 'lisa'] as const) {
+    const v = settings.wrapperShares[w]
+    if (v !== undefined && (!Number.isFinite(v) || v < 0 || v > 100)) {
+      throw new RangeError(`allocateWrappers: wrapperShares.${w} must be between 0 and 100, got ${v}`)
+    }
+  }
+
   const budget = Math.max(0, investablePence)
-  const allowance = (w: Wrapper): Pence => settings.allowances[taxYear]?.[w] ?? 0
+  const startYear = (ty: string) => Number(ty.slice(0, 4))
+  let limitsYear: string | undefined = settings.allowances[taxYear] ? taxYear : undefined
+  if (!limitsYear) {
+    limitsYear = Object.keys(settings.allowances)
+      .filter((k) => startYear(k) <= startYear(taxYear))
+      .sort((a, b) => startYear(b) - startYear(a))[0]
+  }
+  const limits = limitsYear ? settings.allowances[limitsYear] : undefined
+  const allowance = (w: Wrapper): Pence => limits?.[w] ?? 0
+  const yearNote = !limitsYear
+    ? `No allowances configured for ${taxYear} \u2014 check Settings`
+    : limitsYear !== taxYear
+      ? `Allowances for ${taxYear} not set; using ${limitsYear} limits \u2014 check Settings`
+      : undefined
+  const withNote = (note?: string) => {
+    const n = [yearNote, note].filter(Boolean).join('; ')
+    return n ? { note: n } : {}
+  }
   const usedIn = (w: Wrapper): Pence =>
     used.filter((u) => u.taxYear === taxYear && u.wrapper === w).reduce((a, u) => a + u.usedPence, 0)
 
@@ -58,17 +88,19 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
   const pensionWanted = Math.floor((budget * (settings.wrapperShares.pension ?? 0)) / 100)
   const pension = Math.min(pensionWanted, remainingPension)
   const pensionNote =
-    pension < pensionWanted ? `Capped by remaining pension allowance for ${taxYear}` : undefined
+    pension < pensionWanted && limitsYear ? `Capped by remaining pension allowance for ${taxYear}` : undefined
 
   // ISA slot (LISA is carved from inside)
   const afterPension = budget - pension
   const monthlyIsaRoom = Math.floor(remainingIsa / monthsLeft)
   const isaSlot = Math.min(afterPension, monthlyIsaRoom)
   let slotNote: string | undefined
-  if (isaSlot < afterPension) {
+  if (isaSlot < afterPension && limitsYear) {
     slotNote =
       remainingIsa === 0
-        ? `ISA room used up for ${taxYear}`
+        ? allowance('isa') === 0
+          ? `No ISA allowance for ${limitsYear}`
+          : `ISA room used up for ${taxYear}`
         : `Capped to spread remaining ISA room over ${monthsLeft} month${monthsLeft === 1 ? '' : 's'}`
   }
 
@@ -79,7 +111,7 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
     const shareCap = share === undefined ? Infinity : Math.floor((budget * share) / 100)
     const monthlyLisaRoom = Math.floor(remainingLisa / monthsLeft)
     lisa = Math.min(isaSlot, monthlyLisaRoom, shareCap)
-    if (lisa < isaSlot) {
+    if (lisa < isaSlot && limitsYear) {
       lisaNote =
         remainingLisa === 0
           ? `LISA allowance used up for ${taxYear}`
@@ -92,10 +124,10 @@ export function allocateWrappers(input: WrapperAllocationInput): WrapperAllocati
   const gia = budget - pension - isaSlot
 
   const out: WrapperAllocation[] = [
-    { wrapper: 'pension', pence: pension, ...(pensionNote && { note: pensionNote }) },
-    { wrapper: 'isa', pence: isa, ...(slotNote && { note: slotNote }) },
+    { wrapper: 'pension', pence: pension, ...withNote(pensionNote) },
+    { wrapper: 'isa', pence: isa, ...withNote(slotNote) },
   ]
-  if (lisaEnabled) out.push({ wrapper: 'lisa', pence: lisa, ...(lisaNote && { note: lisaNote }) })
+  if (lisaEnabled) out.push({ wrapper: 'lisa', pence: lisa, ...withNote(lisaNote) })
   out.push({ wrapper: 'gia', pence: gia })
   return out
 }

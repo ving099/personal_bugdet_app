@@ -12,7 +12,12 @@ const TODAY = '2026-10-26' // 6 months left (Oct..Mar)
 
 const run = (
   investablePence: number,
-  opts: { today?: string; used?: AllowanceUsed[]; lisaEnabled?: boolean; s?: typeof settings } = {},
+  opts: {
+    today?: string
+    used?: AllowanceUsed[]
+    lisaEnabled?: boolean
+    s?: typeof settings
+  } = {},
 ) =>
   allocateWrappers({
     investablePence,
@@ -23,7 +28,11 @@ const run = (
   })
 const get = (r: ReturnType<typeof run>, w: Wrapper) => r.find((x) => x.wrapper === w)?.pence
 const sum = (r: ReturnType<typeof run>) => r.reduce((a, x) => a + x.pence, 0)
-const used = (taxYear: string, wrapper: Wrapper, usedPence: number): AllowanceUsed => ({ taxYear, wrapper, usedPence })
+const used = (taxYear: string, wrapper: Wrapper, usedPence: number): AllowanceUsed => ({
+  taxYear,
+  wrapper,
+  usedPence,
+})
 
 describe('allocateWrappers', () => {
   it('splits £1,000 into pension £250, ISA £750, GIA £0 with six months left', () => {
@@ -43,13 +52,18 @@ describe('allocateWrappers', () => {
   })
 
   it('ignores used rows from other tax years', () => {
-    const r = run(100000, { used: [used('2025/26', 'isa', 2000000), used('2025/26', 'pension', 6000000)] })
+    const r = run(100000, {
+      used: [used('2025/26', 'isa', 2000000), used('2025/26', 'pension', 6000000)],
+    })
     expect(get(r, 'pension')).toBe(25000)
     expect(get(r, 'isa')).toBe(75000)
   })
 
   it('resets to the full £20,000 on 6 April', () => {
-    const r = run(5000000, { today: '2026-04-06', used: [used('2025/26', 'isa', 2000000)] })
+    const r = run(5000000, {
+      today: '2026-04-06',
+      used: [used('2025/26', 'isa', 2000000)],
+    })
     expect(get(r, 'pension')).toBe(1250000)
     // floor(2,000,000 / 12) = 166666
     expect(get(r, 'isa')).toBe(166666)
@@ -78,9 +92,15 @@ describe('allocateWrappers', () => {
     })
 
     it('never exceeds £4,000 a year in total', () => {
-      const r = run(100000, { lisaEnabled: true, used: [used('2026/27', 'lisa', 390000)] })
+      const r = run(100000, {
+        lisaEnabled: true,
+        used: [used('2026/27', 'lisa', 390000)],
+      })
       expect(get(r, 'lisa')).toBe(Math.floor(10000 / 6))
-      const none = run(100000, { lisaEnabled: true, used: [used('2026/27', 'lisa', 400000)] })
+      const none = run(100000, {
+        lisaEnabled: true,
+        used: [used('2026/27', 'lisa', 400000)],
+      })
       expect(get(none, 'lisa')).toBe(0)
       // big month on the last month of the year: 1 month left
       const last = run(2000000, { today: '2027-03-20', lisaEnabled: true })
@@ -131,11 +151,67 @@ describe('allocateWrappers', () => {
     expect(get(odd, 'isa')).toBe(75001)
   })
 
-  it('treats a missing allowance for the tax year as no room', () => {
-    const r = run(100000, { today: '2030-10-01' })
+  it('falls back to the latest configured year when the current one is missing', () => {
+    const note = 'Allowances for 2027/28 not set; using 2026/27 limits \u2014 check Settings'
+    const r = run(100000, { today: '2027-10-26', lisaEnabled: true })
+    expect(get(r, 'pension')).toBe(25000)
+    expect(get(r, 'lisa')).toBe(66666)
+    expect(get(r, 'isa')).toBe(75000 - 66666)
+    expect(get(r, 'gia')).toBe(0)
+    for (const w of ['pension', 'isa'] as const) {
+      expect(r.find((x) => x.wrapper === w)?.note).toBe(note)
+    }
+    // LISA is genuinely capped to 6 months of its allowance, so that true note follows.
+    expect(r.find((x) => x.wrapper === 'lisa')?.note).toBe(
+      `${note}; Capped to spread remaining LISA allowance over 6 months`,
+    )
+    expect(r.find((x) => x.wrapper === 'gia')?.note).toBeUndefined()
+  })
+
+  it('picks the most recent earlier year, ignoring later ones', () => {
+    const s = {
+      ...settings,
+      allowances: {
+        '2025/26': { isa: 600000, lisa: 400000, pension: 6000000 },
+        '2026/27': { isa: 1200000, lisa: 400000, pension: 6000000 },
+        '2029/30': { isa: 0, lisa: 0, pension: 0 },
+      },
+    }
+    const r = run(100000, { today: '2027-10-26', s })
+    expect(get(r, 'isa')).toBe(75000) // 1,200,000 / 6 = 200000 room, not binding
+    expect(get(run(1000000, { today: '2027-10-26', s }), 'isa')).toBe(200000 - 0)
+  })
+
+  it('treats no earlier configured year as zero room with a distinct note', () => {
+    const r = run(100000, { today: '2025-10-01' })
     expect(get(r, 'pension')).toBe(0)
     expect(get(r, 'isa')).toBe(0)
     expect(get(r, 'gia')).toBe(100000)
+    const note = 'No allowances configured for 2025/26 \u2014 check Settings'
+    expect(r.find((x) => x.wrapper === 'pension')?.note).toBe(note)
+    expect(r.find((x) => x.wrapper === 'isa')?.note).toBe(note)
+  })
+
+  it('honours an explicit zero allowance in a configured year', () => {
+    const s = {
+      ...settings,
+      allowances: { '2026/27': { isa: 0, lisa: 400000, pension: 6000000 } },
+    }
+    const r = run(100000, { s })
+    expect(get(r, 'isa')).toBe(0)
+    expect(get(r, 'gia')).toBe(75000)
+    expect(r.find((x) => x.wrapper === 'isa')?.note).toBe('No ISA allowance for 2026/27')
+  })
+
+  it('rejects out-of-range shares', () => {
+    for (const wrapperShares of [
+      { pension: 150 },
+      { pension: -1 },
+      { pension: NaN },
+      { pension: 25, lisa: 101 },
+    ]) {
+      expect(() => run(100000, { s: { ...settings, wrapperShares } })).toThrow(RangeError)
+    }
   })
 
   it('returns all-zero entries for zero or negative investable', () => {
