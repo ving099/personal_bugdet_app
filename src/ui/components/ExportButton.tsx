@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { buildWorkbook } from '../../export/workbook'
 import type { ISODate } from '../../domain/types'
 import { downloadBytes } from '../download'
 import { buildExportData } from '../exportData'
@@ -24,6 +23,8 @@ export default function ExportButton({ month, today }: { month: string; today: I
     try {
       const data = await loadInvestData(db)
       if (!data) throw new Error('Settings are missing.')
+      // ExcelJS is large, so it loads only when someone exports. The service worker precaches the chunk for offline use.
+      const { buildWorkbook } = await import('../../export/workbook')
       const bytes = await buildWorkbook(buildExportData(data, month, today))
       downloadBytes(bytes, `budget-${month}.xlsx`, XLSX_MIME)
     } catch {
