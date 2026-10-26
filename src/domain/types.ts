@@ -18,13 +18,17 @@ export interface Account {
 export interface ImportProfile {
   id: string
   bank: string
-  dateFormat: string
-  descriptionColumn: string
+  dateFormat: 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD' | 'D MMM YYYY'
+  /** Column fields are zero-based indexes into a CSV row. */
+  dateColumn: number
+  descriptionColumn: number
   amountMode: 'single' | 'debitCredit'
-  amountColumn?: string
-  debitColumn?: string
-  creditColumn?: string
-  signConvention: 'negativeIsSpend' | 'positiveIsSpend'
+  amountColumn?: number
+  debitColumn?: number
+  creditColumn?: number
+  /** Single-amount mode only: which sign marks money going out. */
+  signConvention: 'negativeIsOut' | 'positiveIsOut'
+  /** Leading rows to skip. */
   headerRows: number
 }
 
