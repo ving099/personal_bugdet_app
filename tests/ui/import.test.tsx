@@ -284,6 +284,8 @@ describe('Import: focus, busy and edge cases', () => {
     await pickAccount(user, 'Everyday')
     await mapAndPreview(user, csv('single-amount.csv', fixture('single-amount.csv')))
     await importNow(user)
+    // The history row arrives through a live query a moment after the result.
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Undo import of single-amount.csv' })).toHaveLength(2))
     return { db, user }
   }
 
@@ -463,6 +465,8 @@ describe('Import: transfers, refunds and attention', () => {
     await pickAccount(user, 'Everyday')
     await upload(user, csv('cur.csv', stmt(['03/06/2026,BARCLAYCARD CREDIT CARD PAYMENT,-150.00'])))
     await user.click(await screen.findByRole('button', { name: /^Import 1 transaction/ }))
+    // The account picker is locked until the import finishes, so wait for the result before switching.
+    await screen.findByRole('heading', { name: 'Done' })
     const attention = await screen.findByRole('heading', { name: 'Needs attention' })
     const section = attention.closest('section') as HTMLElement
     expect(within(section).getByText('BARCLAYCARD CREDIT CARD PAYMENT')).toBeInTheDocument()

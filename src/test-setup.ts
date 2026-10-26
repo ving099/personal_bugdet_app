@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
 
 /**
@@ -27,6 +27,9 @@ window.matchMedia = (query: string): MediaQueryList => {
     dispatchEvent: () => false,
   }
 }
+
+// Async queries wait for Dexie live queries; the 1s default is too tight when the suite runs in parallel.
+configure({ asyncUtilTimeout: 4000 })
 
 afterEach(() => {
   cleanup()
