@@ -68,6 +68,13 @@ describe('markTransfers', () => {
     expect(res.map((t) => t.isTransfer)).toEqual([true, false, true])
   })
 
+  it('does not pair a candidate more than three days away even when another pair exists', () => {
+    const out = tx('cur', '2026-03-01', -3000)
+    const near = tx('sav', '2026-03-02', 3000)
+    const far = tx('biz', '2026-03-09', 3000)
+    expect(markTransfers([out, near, far], accounts).map((t) => t.isTransfer)).toEqual([true, true, false])
+  })
+
   it('breaks ties by array order', () => {
     const out = tx('cur', '2026-03-10', -3000)
     const first = tx('sav', '2026-03-10', 3000)
@@ -133,9 +140,32 @@ describe('merchantKey', () => {
     expect(merchantKey('  PRET   A MANGER 12/03/2026  ')).toBe('pret a manger')
     expect(merchantKey('CARD ****1234 SHELL 05 MAR')).toBe('card shell')
   })
+  it('keeps the merchant after a processor star', () => {
+    expect(merchantKey('PAYPAL *SPOTIFY')).toBe('paypal spotify')
+    expect(merchantKey('SQ *COFFEE SHOP')).toBe('sq coffee shop')
+    expect(merchantKey('PAYPAL *SPOTIFY')).not.toBe(merchantKey('PAYPAL *NETFLIX'))
+  })
+  it('handles edge cases', () => {
+    expect(merchantKey('')).toBe('')
+    expect(merchantKey('12345 678')).toBe('')
+    expect(merchantKey('CAFÉ NÉRO')).toBe('café néro')
+  })
 })
 
 describe('flagRefunds', () => {
+  it('does not flag a PayPal credit for a different merchant, but flags the same merchant', () => {
+    const buy = tx('cur', '2026-03-01', -999, 'PAYPAL *SPOTIFY')
+    const other = tx('cur', '2026-03-05', 999, 'PAYPAL *NETFLIX')
+    const same = tx('cur', '2026-03-06', 999, 'PAYPAL *SPOTIFY')
+    expect(flagRefunds([buy, other, same]).map((t) => t.isRefund)).toEqual([false, false, true])
+  })
+
+  it('ignores transfer outflows as purchase history', () => {
+    const out = { ...tx('cur', '2026-03-01', -5000, 'MOVE'), isTransfer: true }
+    const back = tx('cur', '2026-03-02', 5000, 'MOVE')
+    expect(flagRefunds([out, back])[1].isRefund).toBe(false)
+  })
+
   it('flags a credit matching an earlier purchase, not a salary credit', () => {
     const buy = tx('cur', '2026-03-01', -2500, 'AMAZON')
     const refund = tx('cur', '2026-03-09', 2500, 'AMAZON')

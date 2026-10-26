@@ -9,7 +9,8 @@ const MONTHS = 'jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec'
 
 /**
  * Normalised merchant name for comparing descriptions of the same merchant.
- * Lower-cases, drops `*` masks and the reference attached to them, numeric
+ * Lower-cases, drops references glued to a `*` ("AMAZON.CO.UK*2K4", "****1234") but keeps
+ * the merchant after a processor star ("PAYPAL *SPOTIFY" gives "paypal spotify"), numeric
  * dates ("12/03/2026"), day-month dates ("05 MAR"), and all digits, then
  * collapses whitespace. "TESCO STORES 4412" and "Tesco Stores 9981" both give
  * "tesco stores"; "AMAZON.CO.UK*2K4 LONDON" gives "amazon.co.uk london".
@@ -17,7 +18,8 @@ const MONTHS = 'jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec'
 export function merchantKey(description: string): string {
   return description
     .toLowerCase()
-    .replace(/\*\S*/g, ' ')
+    .replace(/(?<=\S)\*\S*\d\S*/g, ' ')
+    .replace(/\*/g, ' ')
     .replace(/\b\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4}\b/g, ' ')
     .replace(new RegExp(`\\b\\d{1,2}\\s+(${MONTHS})[a-z]*\\b`, 'g'), ' ')
     .replace(/\d+/g, ' ')
@@ -85,7 +87,7 @@ export function isSpendingTx(tx: Transaction, accounts: Account[]): boolean {
 export function flagRefunds(txs: Transaction[]): Transaction[] {
   const spentOn = new Map<string, string[]>()
   for (const t of txs) {
-    if (t.amountPence >= 0) continue
+    if (t.amountPence >= 0 || t.isTransfer) continue
     const key = merchantKey(t.description)
     if (key) spentOn.set(key, [...(spentOn.get(key) ?? []), t.date])
   }
