@@ -80,7 +80,7 @@ describe('Home', () => {
     const { user, onNavigate } = await setup(db, { txs: month, streams: [salary] })
     const card = await screen.findByRole('region', { name: 'Invest this month' })
     // £3,000 expected income with no earlier history, 10% buffer: £2,700.
-    expect(within(card).getByText('£2,700.00')).toBeInTheDocument()
+    await waitFor(() => expect(within(card).getByText('£2,700.00')).toBeInTheDocument())
     await user.click(within(card).getByRole('button', { name: 'See the plan' }))
     expect(onNavigate).toHaveBeenCalledWith('invest')
   })
@@ -89,24 +89,24 @@ describe('Home', () => {
     const db = await freshDb()
     await setup(db, { txs: month })
     const card = await screen.findByRole('region', { name: 'Invest this month' })
-    expect(within(card).getByText('Add your income first')).toBeInTheDocument()
-    expect(within(card).getByRole('button', { name: 'See why' })).toBeInTheDocument()
+    await waitFor(() => expect(within(card).getByText('Add your income first')).toBeInTheDocument())
+    await waitFor(() => expect(within(card).getByRole('button', { name: 'See why' })).toBeInTheDocument())
   })
 
   it('says Nothing to invest this month when the figure works out at £0', async () => {
     const db = await freshDb()
     await setup(db, { txs: month, streams: [salary], debts: [{ ...visa, balancePence: 10000000, aprPercent: 22.9, minimumPaymentPence: 0 }] })
     const card = await screen.findByRole('region', { name: 'Invest this month' })
-    expect(within(card).getByText('Nothing to invest this month')).toBeInTheDocument()
+    await waitFor(() => expect(within(card).getByText('Nothing to invest this month')).toBeInTheDocument())
     expect(within(card).queryByRole('button', { name: 'See the plan' })).not.toBeInTheDocument()
-    expect(within(card).getByRole('button', { name: 'See why' })).toBeInTheDocument()
+    await waitFor(() => expect(within(card).getByRole('button', { name: 'See why' })).toBeInTheDocument())
   })
 
   it('shows Back up now when a backup is overdue, and it goes to Settings', async () => {
     const db = await freshDb()
     const { user, onNavigate } = await setup(db, { txs: month, streams: [salary], settings: { backupLastAt: '2026-09-01' } })
     const button = await screen.findByRole('button', { name: 'Back up now' })
-    expect(screen.getByText('Your last backup was more than 30 days ago.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Your last backup was more than 30 days ago.')).toBeInTheDocument())
     await user.click(button)
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
@@ -114,8 +114,8 @@ describe('Home', () => {
   it('treats never backed up as overdue', async () => {
     const db = await freshDb()
     await setup(db, { txs: month, streams: [salary], settings: { backupLastAt: undefined } })
-    expect(await screen.findByRole('button', { name: 'Back up now' })).toBeInTheDocument()
-    expect(screen.getByText('You have not made a backup yet.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Back up now' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('You have not made a backup yet.')).toBeInTheDocument())
   })
 
   it('lists uncategorised spending and unmatched card repayments', async () => {
@@ -132,8 +132,8 @@ describe('Home', () => {
       ],
     })
     const list = await screen.findByRole('list', { name: 'Needs attention' })
-    expect(within(list).getByText('2 transactions need a category.')).toBeInTheDocument()
-    expect(within(list).getByText(/1 card repayment has no matching payment into a card account/)).toBeInTheDocument()
+    await waitFor(() => expect(within(list).getByText('2 transactions need a category.')).toBeInTheDocument())
+    await waitFor(() => expect(within(list).getByText(/1 card repayment has no matching payment into a card account/)).toBeInTheDocument())
     expect(screen.queryByText('All caught up')).not.toBeInTheDocument()
     await user.click(within(list).getByRole('button', { name: 'Categorise' }))
     expect(onNavigate).toHaveBeenCalledWith('budget')
@@ -142,14 +142,14 @@ describe('Home', () => {
   it('says All caught up when nothing needs attention', async () => {
     const db = await freshDb()
     await setup(db, { txs: month, streams: [salary] })
-    expect(await screen.findByText('All caught up')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('All caught up')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: 'Back up now' })).not.toBeInTheDocument()
   })
 
   it('shows a welcome for a brand-new user', async () => {
     const db = await freshDb()
     const { user, onNavigate } = await setup(db)
-    expect(await screen.findByText('Nothing to show yet')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Nothing to show yet')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Import a statement' }))
     expect(onNavigate).toHaveBeenCalledWith('import')
   })
@@ -164,6 +164,6 @@ describe('Home in the app', () => {
     render(<App db={db} />)
     await user.click(await screen.findByRole('button', { name: 'See the plan' }))
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Invest' })).toHaveAttribute('aria-selected', 'true'))
-    expect(await screen.findByRole('heading', { name: 'How we got this number' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'How we got this number' })).toBeInTheDocument())
   })
 })

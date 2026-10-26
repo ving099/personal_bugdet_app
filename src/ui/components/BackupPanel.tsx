@@ -13,9 +13,13 @@ import { Button, TextInput } from './forms'
 /** crypto.ts sets no minimum, so the app asks for a passphrase of at least this many characters. */
 export const MIN_PASSPHRASE_LENGTH = 8
 
+/** A real backup is far smaller than this; refusing big files avoids reading something unrelated into memory. */
+export const MAX_BACKUP_BYTES = 50 * 1024 * 1024
+
 const KEPT = "Couldn't restore. Your existing data has not been changed."
 const MESSAGES = {
-  wrong: "That passphrase doesn't match this backup.",
+  wrong: 'Wrong passphrase, or the file is damaged.',
+  tooBig: 'That file is too big to be a backup from this app (the limit is 50 MB).',
   invalid: "This file looks damaged or isn't a backup from this app.",
   kept: KEPT,
 } as const
@@ -44,6 +48,8 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
   const [attempted, setAttempted] = useState(false)
   const [encrypting, setEncrypting] = useState(false)
   const [backupError, setBackupError] = useState('')
+  const [backupStatus, setBackupStatus] = useState('')
+  const [backupWarning, setBackupWarning] = useState('')
   const [status, setStatus] = useState('')
   const encryptRunning = useRef(false)
 
@@ -60,23 +66,32 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
     ? `Use at least ${MIN_PASSPHRASE_LENGTH} characters.` : undefined
 
   async function backUp() {
-    if (encryptRunning.current) return
+    if (encryptRunning.current || restoreRunning.current) return
     setAttempted(true)
-    setStatus('')
+    setBackupStatus('')
+    setBackupWarning('')
     setBackupError('')
     if (pass.length < MIN_PASSPHRASE_LENGTH || pass !== confirm) return
     encryptRunning.current = true
     setEncrypting(true)
+    let downloaded = false
     try {
-      const bytes = await encryptBackup(await exportSnapshot(db), pass)
+      // The date is stamped into the file too, so a device restored from it starts with this backup's own date.
+      const bytes = await encryptBackup(await exportSnapshot(db, { settings: { backupLastAt: today } }), pass)
       downloadBytes(bytes, `budget-backup-${today}.bin`, 'application/octet-stream')
-      await db.settings.update('main', { backupLastAt: today })
+      downloaded = true
       setPass('')
       setConfirm('')
       setAttempted(false)
-      setStatus('Backup downloaded. Keep the file and your passphrase somewhere safe; without the passphrase it cannot be opened.')
+      setBackupStatus('Backup downloaded. Keep the file and your passphrase somewhere safe; without the passphrase it cannot be opened.')
+      await db.settings.update('main', { backupLastAt: today })
     } catch {
-      setBackupError("Couldn't make the backup. Nothing was changed. Try again.")
+      if (downloaded) {
+        setBackupStatus('')
+        setBackupWarning("The backup file downloaded, but the 'last backup' date could not be saved on this device.")
+      } else {
+        setBackupError("Couldn't make the backup. Nothing was changed. Try again.")
+      }
     } finally {
       encryptRunning.current = false
       setEncrypting(false)
@@ -85,8 +100,13 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
 
   function askToRestore() {
     setStatus('')
+    if (encryptRunning.current) return
     if (!file) {
       setRestoreError('Choose a backup file first.')
+      return
+    }
+    if (file.size > MAX_BACKUP_BYTES) {
+      setRestoreError(MESSAGES.tooBig)
       return
     }
     if (restorePass.length === 0) {
@@ -98,7 +118,7 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
   }
 
   async function restore() {
-    if (restoreRunning.current || !file) return
+    if (restoreRunning.current || encryptRunning.current || !file) return
     restoreRunning.current = true
     setRestoring(true)
     try {
@@ -107,7 +127,7 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
       setFile(null)
       setRestorePass('')
       setRestoreError('')
-      setStatus('Backup restored. Everything on this device now matches the backup.')
+      setStatus('Backup restored. Everything on this device now matches the backup. Your app lock on this device was not changed.')
     } catch (e) {
       setRestoreError(restoreMessage(e))
     } finally {
@@ -132,14 +152,16 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
         The file is encrypted with your passphrase and stays on your device until you move it. We can&apos;t recover a forgotten passphrase.
       </p>
       <TextInput label="Backup passphrase" type="password" autoComplete="new-password" value={pass}
-        onChange={(v) => { setPass(v); setStatus('') }} error={tooShort}
+        onChange={(v) => { setPass(v); setBackupStatus('') }} error={tooShort}
         hint={`At least ${MIN_PASSPHRASE_LENGTH} characters.`} />
       <TextInput label="Confirm backup passphrase" type="password" autoComplete="new-password" value={confirm}
-        onChange={(v) => { setConfirm(v); setStatus('') }} error={mismatch} />
+        onChange={(v) => { setConfirm(v); setBackupStatus('') }} error={mismatch} />
       <Button variant="primary" onClick={() => void backUp()} aria-busy={encrypting}>
         {encrypting ? 'Encrypting…' : 'Download encrypted backup'}
       </Button>
       {backupError && <p className="form-error" role="alert">{backupError}</p>}
+      {backupWarning && <p className="form-error" role="alert">{backupWarning}</p>}
+      <p className="save-status" role="status">{backupStatus}</p>
 
       <h3 className="settings-subheading">Restore from a backup</h3>
       <p className="settings-note">Restoring replaces all data on this device with the contents of the backup file.</p>
@@ -152,7 +174,7 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
             e.target.value = ''
             setFile(f)
             setRestoreError('')
-            setStatus('')
+            setStatus(f ? `Chosen file: ${f.name}` : '')
           }} />
       </div>
       <TextInput label="Passphrase for the backup file" type="password" autoComplete="current-password" value={restorePass}
@@ -168,7 +190,7 @@ export default function BackupPanel({ today = todayISO() }: { today?: ISODate })
           confirmLabel={restoring ? 'Restoring…' : 'Replace all data'}
           onCancel={() => setAsking(false)}
           onConfirm={() => void restore()}
-          busy={restoring}
+          busy={restoring || encrypting}
         >
           <p>
             Restoring replaces all data on this device, including your budget, transactions, settings and passcode, with the

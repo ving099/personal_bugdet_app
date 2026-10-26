@@ -46,10 +46,31 @@ describe('snapshot', () => {
   it('replaces existing data entirely, including settings', async () => {
     await seedDefaults(dst)
     await dst.transactions.add(tx(99))
-    await dst.settings.update('main', { appLock: { salt: 'x', hash: 'y' } })
     await restoreSnapshot(dst, await exportSnapshot(src))
     expect(await dst.transactions.get('t99')).toBeUndefined()
+  })
+
+  it('never exports the app lock, and keeps the device lock on restore', async () => {
+    await seedDefaults(dst)
+    await src.settings.update('main', { appLock: { salt: 'srcsalt', hash: 'srchash' } })
+    const json = await exportSnapshot(src)
+    expect(json).not.toContain('srchash')
+    await dst.settings.update('main', { appLock: { salt: 'mine', hash: 'minehash' } })
+    await restoreSnapshot(dst, json)
+    expect((await dst.settings.get('main'))?.appLock).toEqual({ salt: 'mine', hash: 'minehash' })
+  })
+
+  it('a backup restored onto a device with no lock leaves it unlocked, even if an old file carries a lock', async () => {
+    const old = JSON.parse(await exportSnapshot(src))
+    old.tables.settings[0].appLock = { salt: 'old', hash: 'oldhash' }
+    await restoreSnapshot(dst, JSON.stringify(old))
     expect((await dst.settings.get('main'))?.appLock).toBeNull()
+  })
+
+  it('stamps settings fields into the file only', async () => {
+    const snap = JSON.parse(await exportSnapshot(src, { settings: { backupLastAt: '2026-10-26' } }))
+    expect(snap.tables.settings[0].backupLastAt).toBe('2026-10-26')
+    expect((await src.settings.get('main'))?.backupLastAt).toBeUndefined()
   })
 
   it('round-trips an empty db', async () => {

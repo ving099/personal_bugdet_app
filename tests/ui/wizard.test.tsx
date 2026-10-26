@@ -43,19 +43,19 @@ describe('Setup wizard', () => {
   it('shows step n of 8 and steps through in order', async () => {
     const user = userEvent.setup()
     renderWizard(await freshDb())
-    expect(await screen.findByText('Step 1 of 8')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1, name: 'Accounts' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Step 1 of 8')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Accounts' })).toBeInTheDocument())
     const titles = ['Income streams', 'Debts', 'Savings pots', 'Sinking funds', 'Allowances used this tax year',
       'Opening holdings', 'Settings basics']
     for (const [i, title] of titles.entries()) {
       await user.click(screen.getByRole('button', { name: 'Next' }))
-      expect(screen.getByText(`Step ${i + 2} of 8`)).toBeInTheDocument()
-      expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Skip setup' })).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByText(`Step ${i + 2} of 8`)).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Skip setup' })).toBeInTheDocument())
     }
-    expect(screen.getByRole('button', { name: 'Finish' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Finish' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Step 7 of 8')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Step 7 of 8')).toBeInTheDocument())
   })
 
   it('writes the expected rows on Finish', async () => {
@@ -69,7 +69,7 @@ describe('Setup wizard', () => {
     await user.type(screen.getByLabelText('Account name'), 'Business current')
     await user.type(screen.getByLabelText('Bank'), 'Monzo')
     await user.selectOptions(screen.getByLabelText('Kind'), 'business')
-    expect(screen.getByText('Business accounts are excluded from your spending.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Business accounts are excluded from your spending.')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Next' }))
 
     // 2 income
@@ -100,7 +100,7 @@ describe('Setup wizard', () => {
     await user.click(screen.getByRole('button', { name: 'Add yearly bill' }))
     await user.type(screen.getByLabelText('Bill name'), 'Car insurance')
     await user.type(screen.getByLabelText('Yearly amount'), '£240')
-    expect(screen.getByText('Monthly set-aside: £20.00')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Monthly set-aside: £20.00')).toBeInTheDocument())
     await user.selectOptions(screen.getByLabelText('Due month'), '6')
     await user.click(screen.getByRole('button', { name: 'Next' }))
 
@@ -176,12 +176,12 @@ describe('Setup wizard', () => {
     const amount = screen.getByLabelText('Expected monthly net amount')
     await user.type(amount, 'lots')
     await user.tab()
-    expect(screen.getByText('Enter an amount like 1,250.00')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Enter an amount like 1,250.00')).toBeInTheDocument())
     expect(amount).toHaveAttribute('aria-invalid', 'true')
     expect(amount).toHaveAccessibleDescription('Enter an amount like 1,250.00')
     await user.click(screen.getByRole('button', { name: 'Next' }))
-    expect(screen.getByText('Step 2 of 8')).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('Fix the highlighted fields')
+    await waitFor(() => expect(screen.getByText('Step 2 of 8')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Fix the highlighted fields'))
     for (const t of TABLES) expect(await db[t].count()).toBe(0)
     expect((await db.settings.get('main'))?.onboardingDone).toBe(false)
   })
@@ -193,12 +193,12 @@ describe('Setup wizard', () => {
     await screen.findByText('Step 1 of 8')
     await user.click(screen.getByRole('button', { name: 'Add account' }))
     await user.click(screen.getByRole('button', { name: 'Add account' }))
-    expect(screen.getByRole('button', { name: 'Remove account 2' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove account 2' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Remove account 2' }))
     expect(screen.queryByRole('button', { name: 'Remove account 2' })).not.toBeInTheDocument()
     await user.type(screen.getByLabelText('Account name'), 'Half done')
     await user.click(screen.getByRole('button', { name: 'Skip step' }))
-    expect(screen.getByText('Step 2 of 8')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Step 2 of 8')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.queryByLabelText('Account name')).not.toBeInTheDocument()
     expect(await db.accounts.count()).toBe(0)
@@ -217,8 +217,8 @@ describe('Setup wizard', () => {
     await user.type(screen.getByLabelText('Minimum payment'), '5')
     await user.type(screen.getByLabelText('Promo APR (%, optional)'), '0')
     await user.click(screen.getByRole('button', { name: 'Next' }))
-    expect(screen.getByText('Choose the date the promotion ends')).toBeInTheDocument()
-    expect(screen.getByText('Step 3 of 8')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Choose the date the promotion ends')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Step 3 of 8')).toBeInTheDocument())
   })
 })
 
@@ -228,11 +228,11 @@ describe('Wizard gating in the app', () => {
     const db = await freshDb()
     const before = await db.settings.get('main')
     render(<App db={db} />)
-    expect(await screen.findByText('Step 1 of 8')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Step 1 of 8')).toBeInTheDocument())
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Skip setup' }))
-    expect(await screen.findByRole('tablist')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument())
     expect(screen.queryByText('Step 1 of 8')).not.toBeInTheDocument()
     expect(await db.settings.get('main')).toEqual({ ...before, onboardingDone: true })
     for (const t of TABLES) expect(await db[t].count()).toBe(0)
@@ -245,7 +245,7 @@ describe('Wizard gating in the app', () => {
     await screen.findByText('Step 1 of 8')
     for (let i = 0; i < 7; i++) await user.click(screen.getByRole('button', { name: 'Next' }))
     await user.click(screen.getByRole('button', { name: 'Finish' }))
-    expect(await screen.findByRole('tablist')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument())
     expect((await db.settings.get('main'))?.onboardingDone).toBe(true)
   })
 
@@ -256,6 +256,6 @@ describe('Wizard gating in the app', () => {
     delete row.lisaEnabled
     await db.settings.put(row as never)
     render(<App db={db} />)
-    expect(await screen.findByText('Step 1 of 8')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Step 1 of 8')).toBeInTheDocument())
   })
 })

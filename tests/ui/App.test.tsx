@@ -44,14 +44,14 @@ describe('App shell', () => {
     const names = ['Home', 'Import', 'Budget', 'Debts & Savings', 'Invest', 'Settings']
     for (const name of names) expect(screen.getByRole('tab', { name })).toBeInTheDocument()
     expect(screen.getAllByRole('tab')).toHaveLength(6)
-    expect(screen.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'true'))
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument())
 
     await user.click(screen.getByRole('tab', { name: 'Budget' }))
-    expect(screen.getByRole('tab', { name: 'Budget' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'false')
-    expect(screen.getByRole('heading', { level: 1, name: 'Budget' })).toBeInTheDocument()
-    expect(within(screen.getByRole('tabpanel')).getByRole('heading', { level: 1 })).toHaveTextContent('Budget')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Budget' })).toHaveAttribute('aria-selected', 'true'))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'false'))
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Budget' })).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByRole('tabpanel')).getByRole('heading', { level: 1 })).toHaveTextContent('Budget'))
   })
 
   it('moves between tabs with the arrow keys', async () => {
@@ -60,28 +60,28 @@ describe('App shell', () => {
     await ready()
     screen.getByRole('tab', { name: 'Home' }).focus()
     await user.keyboard('{ArrowDown}')
-    expect(screen.getByRole('tab', { name: 'Import' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Import' })).toHaveAttribute('aria-selected', 'true'))
     await user.keyboard('{End}')
-    expect(screen.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true'))
   })
 
   it('uses the bottom bar by default and the sidebar at 900px and above', async () => {
     const { unmount } = render(<App db={await freshDb()} />)
     await ready()
-    expect(screen.getByRole('navigation')).toHaveAttribute('data-variant', 'bottom')
+    await waitFor(() => expect(screen.getByRole('navigation')).toHaveAttribute('data-variant', 'bottom'))
     unmount()
     setViewportWidth(1200)
     render(<App db={await freshDb()} />)
     await ready()
-    expect(screen.getByRole('navigation')).toHaveAttribute('data-variant', 'sidebar')
-    expect(screen.getByText('Budget', { selector: '.brand' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('navigation')).toHaveAttribute('data-variant', 'sidebar'))
+    await waitFor(() => expect(screen.getByText('Budget', { selector: '.brand' })).toBeInTheDocument())
   })
 
   it('has a skip link and a main landmark', async () => {
     render(<App db={await freshDb()} />)
     await ready()
-    expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
-    expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main'))
+    await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('id', 'main'))
   })
 
   it('follows settings.theme on the html element', async () => {
@@ -111,7 +111,7 @@ describe('App shell', () => {
     render(<App db={await freshDb()} />)
     await ready()
     await user.click(screen.getByRole('tab', { name: 'Invest' }))
-    expect(screen.getByRole('heading', { level: 1, name: 'Invest' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Invest' })).toBeInTheDocument())
   })
 
   it('remembers the last tab', async () => {
@@ -122,14 +122,14 @@ describe('App shell', () => {
     first.unmount()
     render(<App db={await freshDb()} />)
     await ready()
-    expect(screen.getByRole('tab', { name: 'Import' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Import' })).toHaveAttribute('aria-selected', 'true'))
   })
 
   it('explains when storage is unavailable', async () => {
     const db = await freshDb()
     vi.spyOn(db, 'transaction').mockRejectedValue(new Error('no storage'))
     render(<App db={db} />)
-    expect(await screen.findByText('Storage is unavailable')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Storage is unavailable')).toBeInTheDocument())
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
   })
 })
@@ -155,12 +155,12 @@ describe('Lock screen', () => {
 
     await user.type(input, '1111')
     await user.click(unlock)
-    expect(await screen.findByRole('alert')).toHaveTextContent("That passcode doesn't match. Try again.")
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("That passcode doesn't match. Try again."))
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
 
     await user.clear(input)
     await user.type(input, '2468{Enter}')
-    expect(await screen.findByRole('tablist')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument())
     expect(screen.queryByLabelText('Passcode')).not.toBeInTheDocument()
   }, 30000)
 })

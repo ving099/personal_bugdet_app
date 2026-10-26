@@ -4,6 +4,7 @@ import Dexie from 'dexie'
 import ExcelJS from 'exceljs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { decryptBackup, encryptBackup } from '../../src/backup/crypto'
+import { hashPasscode, verifyPasscode } from '../../src/backup/lock'
 import { exportSnapshot, restoreSnapshot } from '../../src/backup/snapshot'
 import type { Transaction } from '../../src/domain/types'
 import { openDb, type BudgetDB } from '../../src/storage/db'
@@ -38,21 +39,22 @@ async function withData(db: BudgetDB): Promise<void> {
   await db.transactions.bulkPut([tx('pay', 300000, { incomeStreamId: 's' }), tx('shop', -4500)])
 }
 
-interface Download { blob: Blob; name: string }
+interface Download { blob: Blob; name: string; url: string }
+let urlSeq = 0 // never reset: deferred revokes from earlier tests must not look like this test's
 let downloads: Download[]
 let revoked: string[]
 
 beforeEach(() => {
   downloads = []
   revoked = []
-  let pending: Blob | undefined
+  let pending: { blob: Blob; url: string } | undefined
   URL.createObjectURL = vi.fn((b: Blob) => {
-    pending = b
-    return `blob:test-${downloads.length}`
+    pending = { blob: b, url: `blob:test-${++urlSeq}` }
+    return pending.url
   })
   URL.revokeObjectURL = vi.fn((u: string) => { revoked.push(u) })
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
-    downloads.push({ blob: pending!, name: this.download })
+    downloads.push({ ...pending!, name: this.download })
   })
 })
 
@@ -99,7 +101,7 @@ describe('month-end spreadsheet', () => {
     const names = await sheetNames(downloads[0])
     expect(names).toHaveLength(7)
     expect(names).toEqual(expect.arrayContaining(['Summary', 'Transactions', 'Budget vs Actual', 'Investment Plan']))
-    expect(revoked).toEqual(['blob:test-0'])
+    await waitFor(() => expect(revoked).toContain(downloads[0].url), { timeout: 3000 })
   })
 
   it('Budget exports the month shown and ignores a double click', async () => {
@@ -125,7 +127,7 @@ describe('month-end spreadsheet', () => {
     show(db, <Home today={TODAY} />)
     vi.mocked(URL.createObjectURL).mockImplementationOnce(() => { throw new Error('no') })
     await user.click(await screen.findByRole('button', { name: SPREADSHEET }))
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't make the spreadsheet")
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't make the spreadsheet"))
     await user.click(screen.getByRole('button', { name: SPREADSHEET }))
     await waitFor(() => expect(downloads).toHaveLength(1))
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
@@ -153,18 +155,27 @@ describe('encrypted backup', () => {
     await withData(source)
     const user = userEvent.setup()
     show(source, <Settings today={TODAY} />)
-    expect(await screen.findByText('No backup yet')).toBeInTheDocument()
-    expect(screen.getByLabelText('Backup passphrase')).toHaveAttribute('autocomplete', 'new-password')
+    await waitFor(() => expect(screen.getByText('No backup yet')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByLabelText('Backup passphrase')).toHaveAttribute('autocomplete', 'new-password'))
     await fillBackup(user, PASS, PASS)
+    // Hold key derivation at a gate so the busy state is observable however fast the machine is.
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    const derive = crypto.subtle.deriveKey.bind(crypto.subtle) as (...a: unknown[]) => Promise<CryptoKey>
+    vi.spyOn(crypto.subtle, 'deriveKey').mockImplementation((async (...a: unknown[]) => {
+      await gate
+      return derive(...a)
+    }) as never)
     await user.click(screen.getByRole('button', { name: 'Download encrypted backup' }))
-    expect(await screen.findByRole('button', { name: 'Encrypting…' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Encrypting…' })).toBeInTheDocument())
+    release()
     await waitFor(() => expect(downloads).toHaveLength(1), { timeout: 15000 })
     expect(downloads[0].name).toBe('budget-backup-2026-10-26.bin')
-    expect(revoked).toHaveLength(1)
+    await waitFor(() => expect(revoked).toContain(downloads[0].url), { timeout: 3000 })
     await waitFor(async () => expect((await source.settings.get('main'))?.backupLastAt).toBe('2026-10-26'))
-    expect(await screen.findByText('Last backup: 26 Oct 2026')).toBeInTheDocument()
-    expect(await screen.findByText(/Backup downloaded/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Backup passphrase')).toHaveValue('')
+    await waitFor(() => expect(screen.getByText('Last backup: 26 Oct 2026')).toBeInTheDocument(), { timeout: 10000 })
+    await waitFor(() => expect(screen.getByText(/Backup downloaded/)).toBeInTheDocument(), { timeout: 10000 })
+    await waitFor(() => expect(screen.getByLabelText('Backup passphrase')).toHaveValue(''))
     cleanup()
 
     // A different, empty device restores it through the UI.
@@ -175,19 +186,37 @@ describe('encrypted backup', () => {
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('replaces all data on this device')
     await user.click(within(dialog).getByRole('button', { name: 'Replace all data' }))
-    expect(await screen.findByText(/Backup restored/, undefined, { timeout: 15000 })).toBeInTheDocument()
-    expect(screen.getByText(/Backup restored/)).toHaveAttribute('role', 'status')
+    await waitFor(() => expect(screen.getByText(/Backup restored/)).toBeInTheDocument(), { timeout: 15000 })
+    await waitFor(() => expect(screen.getByText(/Backup restored/)).toHaveAttribute('role', 'status'))
     expect(await target.transactions.count()).toBe(2)
     expect((await target.incomeStreams.toArray()).map((s) => s.label)).toEqual(['Salary'])
-    expect((await target.settings.get('main'))?.backupLastAt).toBeUndefined() // snapshot taken before the date was set
+    expect((await target.settings.get('main'))?.backupLastAt).toBe('2026-10-26') // the file carries its own date
   }, 40000)
+
+  it('warns, rather than failing, when the file downloaded but the date could not be saved', async () => {
+    const db = await freshDb()
+    const user = userEvent.setup()
+    vi.spyOn(db.settings, 'update').mockRejectedValueOnce(new Error('disk full'))
+    show(db, <Settings today={TODAY} />)
+    await fillBackup(user, PASS, PASS)
+    await user.click(screen.getByRole('button', { name: 'Download encrypted backup' }))
+    await waitFor(() => expect(screen.getByText(/downloaded, but the 'last backup' date could not be saved/)).toBeInTheDocument(), { timeout: 15000 })
+    expect(downloads).toHaveLength(1)
+    expect(screen.queryByText(/Couldn't make the backup/)).not.toBeInTheDocument()
+  }, 30000)
+
+  it('stamps the backup date into the file itself', async () => {
+    const db = await freshDb()
+    const snap = JSON.parse(await exportSnapshot(db, { settings: { backupLastAt: TODAY } }))
+    expect(snap.tables.settings[0].backupLastAt).toBe(TODAY)
+  })
 
   it('shows a mismatch error and makes no backup', async () => {
     const db = await freshDb()
     const user = userEvent.setup()
     show(db, <Settings today={TODAY} />)
     await fillBackup(user, PASS, 'something else')
-    expect(await screen.findByText("The passphrases don't match.")).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText("The passphrases don't match.")).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Download encrypted backup' }))
     expect(downloads).toHaveLength(0)
     expect((await db.settings.get('main'))?.backupLastAt).toBeUndefined()
@@ -199,7 +228,7 @@ describe('encrypted backup', () => {
     show(db, <Settings today={TODAY} />)
     await fillBackup(user, 'short', 'short')
     await user.click(screen.getByRole('button', { name: 'Download encrypted backup' }))
-    expect(await screen.findByText('Use at least 8 characters.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Use at least 8 characters.')).toBeInTheDocument())
     expect(downloads).toHaveLength(0)
   })
 
@@ -207,8 +236,8 @@ describe('encrypted backup', () => {
     const db = await freshDb()
     await db.settings.update('main', { backupLastAt: '2026-08-01' })
     show(db, <Settings today={TODAY} />)
-    expect(await screen.findByText('Last backup: 1 Aug 2026')).toBeInTheDocument()
-    expect(screen.getByText(/over 30 days/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Last backup: 1 Aug 2026')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/over 30 days/)).toBeInTheDocument())
   })
 })
 
@@ -223,7 +252,7 @@ describe('restore', () => {
     show(target, <Settings today={TODAY} />)
     await chooseAndRestore(user, file, 'not the passphrase')
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace all data' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent("That passphrase doesn't match this backup.")
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Wrong passphrase, or the file is damaged.'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect((await target.accounts.toArray()).map((a) => a.id)).toEqual(['mine'])
     expect(await target.transactions.count()).toBe(0)
@@ -236,7 +265,7 @@ describe('restore', () => {
     show(target, <Settings today={TODAY} />)
     await chooseAndRestore(user, new File([new Uint8Array(200)], 'junk.bin'), PASS)
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace all data' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent("This file looks damaged or isn't a backup from this app.")
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("This file looks damaged or isn't a backup from this app."))
     expect(await target.accounts.count()).toBe(1)
   })
 
@@ -248,7 +277,7 @@ describe('restore', () => {
     show(target, <Settings today={TODAY} />)
     await chooseAndRestore(user, new File([bad as BlobPart], 'dup.bin'), PASS)
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace all data' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't restore. Your existing data has not been changed.")
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't restore. Your existing data has not been changed."))
     expect((await target.accounts.toArray()).map((a) => a.id)).toEqual(['mine'])
   })
 
@@ -269,12 +298,20 @@ describe('restore', () => {
     expect(await target.transactions.count()).toBe(0)
   })
 
+  it('announces the chosen file name', async () => {
+    const db = await freshDb()
+    const user = userEvent.setup()
+    show(db, <Settings today={TODAY} />)
+    await user.upload(await screen.findByLabelText('Backup file', { exact: true }), new File(['x'], 'my-backup.bin'))
+    await waitFor(() => expect(screen.getByText('Chosen file: my-backup.bin')).toHaveAttribute('role', 'status'))
+  })
+
   it('needs a file and a passphrase before asking', async () => {
     const db = await freshDb()
     const user = userEvent.setup()
     show(db, <Settings today={TODAY} />)
     await user.click(await screen.findByRole('button', { name: 'Restore from backup…' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a backup file first.')
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Choose a backup file first.'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -290,7 +327,7 @@ describe('restore', () => {
     const first = show(target, <Settings today={TODAY} />)
     await chooseAndRestore(user, file, PASS)
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace all data' }))
-    expect(await screen.findByText(/Backup restored/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText(/Backup restored/)).toBeInTheDocument())
     expect(await target.investmentLog.get('old-1')).toBeDefined()
     first.unmount()
 
@@ -301,6 +338,60 @@ describe('restore', () => {
     await user.click(box)
     await waitFor(async () => expect(await target.investmentLog.count()).toBe(0))
     expect((await target.allowancesUsed.get(['2026/27', 'isa']))?.usedPence).toBe(0)
+  })
+
+  it('keeps this device app lock, ignoring any lock in the file', async () => {
+    const source = await freshDb()
+    await withData(source)
+    const old = JSON.parse(await exportSnapshot(source))
+    old.tables.settings[0].appLock = { salt: 'AAAA', hash: 'BBBB' } // an old file that still carries a lock
+    const file = new File([(await encryptBackup(JSON.stringify(old), PASS, FAST)) as BlobPart], 'old.bin')
+    const target = await freshDb()
+    const mine = await hashPasscode('2468', 1000)
+    await target.settings.update('main', { appLock: mine })
+    const user = userEvent.setup()
+    show(target, <Settings today={TODAY} />)
+    await chooseAndRestore(user, file, PASS)
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace all data' }))
+    await waitFor(() => expect(screen.getByText(/Your app lock on this device was not changed/)).toBeInTheDocument())
+    const lock = (await target.settings.get('main'))!.appLock!
+    expect(lock).toEqual(mine)
+    expect(await verifyPasscode('2468', lock, 1000)).toBe(true)
+    expect(await target.transactions.count()).toBe(2)
+  })
+
+  it('a backup without a lock does not remove this device lock, and restoring onto an unlocked device adds none', async () => {
+    const source = await freshDb()
+    const file = await backupFile(source)
+    expect(JSON.stringify(await exportSnapshot(source))).not.toContain('"appLock"')
+    const locked = await freshDb()
+    const mine = await hashPasscode('1357', 1000)
+    await locked.settings.update('main', { appLock: mine })
+    const user = userEvent.setup()
+    show(locked, <Settings today={TODAY} />)
+    await chooseAndRestore(user, file, PASS)
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace all data' }))
+    await waitFor(() => expect(screen.getByText(/Backup restored/)).toBeInTheDocument())
+    expect((await locked.settings.get('main'))!.appLock).toEqual(mine)
+    cleanup()
+
+    const open = await freshDb()
+    show(open, <Settings today={TODAY} />)
+    await chooseAndRestore(user, file, PASS)
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace all data' }))
+    await waitFor(() => expect(screen.getByText(/Backup restored/)).toBeInTheDocument())
+    expect((await open.settings.get('main'))!.appLock).toBeNull()
+  })
+
+  it('refuses a file over 50 MB', async () => {
+    const target = await freshDb()
+    const user = userEvent.setup()
+    show(target, <Settings today={TODAY} />)
+    const big = new File(['x'], 'big.bin')
+    Object.defineProperty(big, 'size', { value: 60 * 1024 * 1024 })
+    await chooseAndRestore(user, big, PASS)
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('too big'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('round-trips through the library as well', async () => {

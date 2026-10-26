@@ -1823,3 +1823,7 @@ input {
   overflow-wrap: anywhere;
   color: var(--ink-muted);
 }
+
+.budget .export-row {
+  margin-top: 28px;
+}

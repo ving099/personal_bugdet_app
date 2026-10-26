@@ -3,7 +3,7 @@ import { percentPaid, utilisation } from '../debt/debt'
 import type { monthSummary } from '../budget/summary'
 import { sinkingMonthlyPence } from '../budget/summary'
 import type {
-  Account, Category, Debt, Holding, IncomeStream, InvestmentLog, Pence, SavingsPot, SinkingFund, Transaction, Wrapper,
+  Account, Category, Debt, Holding, IncomeStream, InvestmentLog, Pence, Platform, SavingsPot, SinkingFund, Transaction, Wrapper,
 } from '../domain/types'
 import type { MonthlyPlan } from '../invest/plan'
 
@@ -13,6 +13,8 @@ import type { MonthlyPlan } from '../invest/plan'
  */
 export interface ExportData {
   month: string
+  /** Human text for the Summary sheet, for example 'October 2026' or '25 Sep 2026 to 24 Oct 2026'. Defaults to `month`. */
+  monthText?: string
   summary: ReturnType<typeof monthSummary>
   txs: Transaction[]
   categories: Category[]
@@ -25,6 +27,7 @@ export interface ExportData {
   log: InvestmentLog[]
   accounts?: Account[]
   holdings?: Holding[]
+  platforms?: Platform[]
 }
 
 const GBP = '£#,##0.00'
@@ -32,6 +35,16 @@ const PCT = '0.0%'
 const DATE = 'dd/mm/yyyy'
 const WRAPPERS: Wrapper[] = ['pension', 'isa', 'lisa', 'gia']
 const WRAPPER_LABEL: Record<Wrapper, string> = { pension: 'Pension', isa: 'ISA', lisa: 'LISA', gia: 'GIA' }
+
+const BUCKET_LABEL: Record<string, string> = { growth: 'Growth', aggressive: 'Aggressive' }
+const DEBT_KIND_LABEL: Record<string, string> = { card: 'Credit card', loan: 'Loan' }
+/** Same wording as the Invest tab (reasonText), kept here so this file stays free of UI imports. */
+const PLAN_REASON: Record<string, string> = {
+  'no-income': 'There is no income to work from yet. Add an income stream with its expected monthly pay, or import a statement with your pay in it.',
+  'no-surplus': 'Nothing is left to invest this month: your spending, bills, debt payments and safety buffer use up all of your income.',
+}
+/** Percent values are written to one decimal place of percent (22.94 -> 22.9%). */
+const roundPct = (fraction: number) => Math.round(fraction * 1000) / 1000
 
 const pounds = (p: Pence) => p / 100
 const sumPence = (xs: Pence[]) => xs.reduce((a, b) => a + b, 0)
@@ -82,10 +95,11 @@ function txSheet(wb: ExcelJS.Workbook, d: ExportData) {
   setup(ws, ['Date', 'Account', 'Description', 'Amount', 'Category', 'Transfer', 'Refund'], [12, 20, 44, 14, 20, 10, 10])
   const acc = new Map((d.accounts ?? []).map((a) => [a.id, a.name]))
   const cat = new Map(d.categories.map((c) => [c.id, c.name]))
-  for (const t of d.txs) {
+  const sorted = [...d.txs].sort((a, b) => a.date.localeCompare(b.date) || a.description.localeCompare(b.description))
+  for (const t of sorted) {
     const r = ws.addRow([
       toDate(t.date), text(acc.get(t.accountId) ?? t.accountId), text(t.description), null,
-      t.categoryId ? text(cat.get(t.categoryId) ?? t.categoryId) : '', t.isTransfer ? 'Transfer' : '', t.isRefund ? 'Refund' : '',
+      t.categoryId ? text(cat.get(t.categoryId) ?? 'Unknown category') : '', t.isTransfer ? 'Transfer' : '', t.isRefund ? 'Refund' : '',
     ])
     r.getCell(1).numFmt = DATE
     money(r.getCell(4), t.amountPence)
@@ -98,11 +112,14 @@ function budgetSheet(wb: ExcelJS.Workbook, d: ExportData) {
   const ws = wb.addWorksheet('Budget vs Actual')
   setup(ws, ['Category', 'Budgeted', 'Actual', 'Difference'], [28, 14, 14, 14])
   const spent = d.summary.spentByCategory
-  const rows = d.categories.map((c) => ({ name: c.name, budget: c.monthlyLimitPence, actual: spent[c.id] ?? 0 }))
+  const rows = d.categories
+    .filter((c) => !c.excludedFromSpending)
+    .map((c) => ({ name: c.name, budget: c.monthlyLimitPence, actual: spent[c.id] ?? 0 }))
+    .filter((r) => r.budget !== 0 || r.actual !== 0)
   const known = new Set(d.categories.map((c) => c.id))
   for (const [key, actual] of Object.entries(spent)) {
     if (known.has(key)) continue
-    rows.push({ name: key === 'uncategorised' ? 'Uncategorised' : key, budget: 0, actual })
+    if (actual !== 0) rows.push({ name: key === 'uncategorised' ? 'Uncategorised' : 'Unknown category', budget: 0, actual })
   }
   rows.forEach((row, i) => {
     const r = ws.addRow([text(row.name)])
@@ -137,17 +154,17 @@ function debtSheet(wb: ExcelJS.Workbook, d: ExportData) {
   setup(ws, ['Name', 'Type', 'Balance', 'Limit / original', 'APR', 'Minimum payment', 'Utilisation', 'Percent paid'],
     [24, 10, 14, 16, 10, 16, 12, 12])
   for (const x of d.debts) {
-    const r = ws.addRow([text(x.name), x.kind])
+    const r = ws.addRow([text(x.name), DEBT_KIND_LABEL[x.kind] ?? x.kind])
     money(r.getCell(3), x.balancePence)
     money(r.getCell(4), x.creditLimitOrOriginalPence)
-    r.getCell(5).value = x.aprPercent / 100
+    r.getCell(5).value = roundPct(x.aprPercent / 100)
     r.getCell(5).numFmt = PCT
     money(r.getCell(6), x.minimumPaymentPence)
     // Utilisation is for cards, percent paid for loans; blank (never NaN/Infinity) when undefined.
     const u = x.kind === 'card' ? utilisation(x) : undefined
     const p = x.kind === 'loan' ? percentPaid(x) : undefined
-    if (u !== undefined && Number.isFinite(u)) { r.getCell(7).value = u; r.getCell(7).numFmt = PCT }
-    if (p !== undefined && Number.isFinite(p)) { r.getCell(8).value = p; r.getCell(8).numFmt = PCT }
+    if (u !== undefined && Number.isFinite(u)) { r.getCell(7).value = roundPct(u); r.getCell(7).numFmt = PCT }
+    if (p !== undefined && Number.isFinite(p)) { r.getCell(8).value = roundPct(p); r.getCell(8).numFmt = PCT }
   }
   totalRow(ws, 2, d.debts.length, {
     3: sumPence(d.debts.map((x) => x.balancePence)),
@@ -189,8 +206,9 @@ function savingsSheet(wb: ExcelJS.Workbook, d: ExportData) {
 
 function planSheet(wb: ExcelJS.Workbook, d: ExportData) {
   const ws = wb.addWorksheet('Investment Plan')
-  ;[26, 22, 16, 16].forEach((w, i) => { ws.getColumn(i + 1).width = w })
+  ;[26, 22, 28, 16].forEach((w, i) => { ws.getColumn(i + 1).width = w })
   const hname = new Map((d.holdings ?? []).map((h) => [h.id, h.exampleName]))
+  const pname = new Map((d.platforms ?? []).map((p) => [p.id, p.name]))
   let row = 1
   const heading = (...cells: string[]) => {
     const r = ws.getRow(row++)
@@ -200,15 +218,15 @@ function planSheet(wb: ExcelJS.Workbook, d: ExportData) {
   const note = (s: string) => { ws.getRow(row++).getCell(1).value = text(s) }
   const plan = d.plan
   if (!plan) {
-    note('No plan for this month.')
+    note('A plan is only worked out for the current budget month.')
   } else if (!plan.ok) {
-    note(`No plan for this month: ${plan.reason ?? 'unknown reason'}`)
+    note(`No plan: ${(plan.reason && PLAN_REASON[plan.reason]) || 'there is nothing to invest this month.'}`)
   } else {
     heading('Wrapper', 'Platform', 'Amount')
     for (const l of plan.lines) {
       const r = ws.getRow(row++)
       r.getCell(1).value = WRAPPER_LABEL[l.wrapper]
-      r.getCell(2).value = text(l.platformId)
+      r.getCell(2).value = text(pname.get(l.platformId) ?? l.platformId)
       money(r.getCell(3), l.pence)
     }
     row++
@@ -216,7 +234,7 @@ function planSheet(wb: ExcelJS.Workbook, d: ExportData) {
     for (const h of plan.holdings) {
       const r = ws.getRow(row++)
       r.getCell(1).value = text(hname.get(h.holdingId) ?? h.holdingId)
-      r.getCell(2).value = h.bucket
+      r.getCell(2).value = BUCKET_LABEL[h.bucket] ?? h.bucket
       money(r.getCell(3), h.pence)
     }
     row++
@@ -229,7 +247,7 @@ function planSheet(wb: ExcelJS.Workbook, d: ExportData) {
     if (plan.notes.length) { row++; heading('Notes'); plan.notes.forEach(note) }
   }
   row++
-  heading(`Allowances ${d.allowances.taxYear}`, 'Limit', 'Used', 'Remaining')
+  heading(`Allowances ${d.allowances.taxYear}`, 'Limit', 'Used this tax year (to date)', 'Remaining')
   for (const w of WRAPPERS) {
     const r = ws.getRow(row)
     r.getCell(1).value = `${WRAPPER_LABEL[w]} allowance`
@@ -263,8 +281,8 @@ export async function buildWorkbook(data: ExportData): Promise<Uint8Array> {
 
   const s = data.summary
   summary.getColumn(1).width = 28
-  summary.getColumn(2).width = 16
-  summary.addRow(['Month', text(data.month)]).font = { bold: true }
+  summary.getColumn(2).width = 28
+  summary.addRow(['Month', text(data.monthText ?? data.month)]).font = { bold: true }
   summary.addRow(['Total income'])
   formula(summary.getCell('B2'), `'Income by Stream'!B${totalIncomeRow}`, pounds(s.totalIncomePence))
   summary.addRow(['Total spent'])

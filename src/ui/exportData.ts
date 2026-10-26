@@ -1,9 +1,20 @@
 import { txsInMonth } from '../budget/months'
 import { monthSummary } from '../budget/summary'
-import { taxYearOfBudgetMonth } from '../domain/dates'
+import { budgetMonthRange, taxYearOfBudgetMonth } from '../domain/dates'
 import type { ISODate, Wrapper, Pence } from '../domain/types'
 import type { ExportData } from '../export/workbook'
+import { monthLabel } from './screens/budget/budgetModel'
 import { buildInvestView, withTaxYears, type InvestData } from './screens/invest/investModel'
+
+const SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const dmy = (iso: string) => `${Number(iso.slice(8, 10))} ${SHORT[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`
+
+/** 'October 2026' for a calendar-month budget, else the exact period, e.g. '25 Sep 2026 to 24 Oct 2026'. */
+function monthText(month: string, startDay: number): string {
+  if (startDay === 1) return monthLabel(month)
+  const { from, to } = budgetMonthRange(month, startDay)
+  return `${dmy(from)} to ${dmy(to)}`
+}
 
 const WRAPPERS: Wrapper[] = ['pension', 'isa', 'lisa', 'gia']
 
@@ -27,6 +38,7 @@ export function buildExportData(data: InvestData, month: string, today: ISODate)
   ) as Record<Wrapper, Pence>
   return {
     month,
+    monthText: monthText(month, startDay),
     summary: monthSummary({ month, startDay, txs, accounts, categories, streams }),
     txs: txsInMonth(txs, month, startDay),
     categories,
@@ -39,5 +51,6 @@ export function buildExportData(data: InvestData, month: string, today: ISODate)
     log: withTaxYears(data.log, startDay),
     accounts,
     holdings: data.holdings,
+    platforms: data.platforms,
   }
 }

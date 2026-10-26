@@ -60,6 +60,11 @@ async function load(d: ExportData) {
   await wb.xlsx.load(buf as unknown as ArrayBuffer)
   return wb
 }
+const find3 = (ws: ExcelJS.Worksheet, label: string) => {
+  let found: ExcelJS.Row | undefined
+  ws.eachRow((r) => { if (!found && r.getCell(3).value === label) found = r })
+  return found
+}
 const find = (ws: ExcelJS.Worksheet, label: string) => {
   let found: ExcelJS.Row | undefined
   ws.eachRow((r) => { if (!found && r.getCell(1).value === label) found = r })
@@ -97,7 +102,7 @@ describe('buildWorkbook', () => {
 
   it('stores formula-looking descriptions as strings', async () => {
     const ws = (await load(data())).getWorksheet('Transactions')!
-    const cell = ws.getRow(3).getCell(3)
+    const cell = find3(ws, '=HYPERLINK("http://x","y")')!.getCell(3)
     expect(cell.type).toBe(ExcelJS.ValueType.String)
     expect(cell.value).toBe('=HYPERLINK("http://x","y")')
     expect(cell.formula).toBeUndefined()
@@ -160,7 +165,57 @@ describe('buildWorkbook', () => {
     const ws = (await load(data({ plan }))).getWorksheet('Investment Plan')!
     const texts: unknown[] = []
     ws.eachRow((r) => r.eachCell((c) => texts.push(String(c.value))))
-    expect(texts.some((t) => t.includes('no-surplus'))).toBe(true)
+    expect(texts.some((t) => t.includes('Nothing is left to invest this month'))).toBe(true)
+    expect(texts.some((t) => t.includes('no-surplus'))).toBe(false)
+  })
+
+  it('sorts transactions by date then description', async () => {
+    const extra = [tx('b-late', -1, { date: '2026-10-09' }), tx('a-early', -1, { date: '2026-10-01' })]
+    const ws = (await load(data({ txs: [...extra, ...txs] }))).getWorksheet('Transactions')!
+    const descs: string[] = []
+    ws.eachRow((r, n) => { if (n > 1) descs.push(String(r.getCell(3).value)) })
+    expect(descs[0]).toBe('a-early')
+    expect(descs.at(-1)).toBe('b-late')
+    expect(descs.slice(1, -1)).toEqual([...descs.slice(1, -1)].sort((a, b) => a.localeCompare(b)))
+  })
+
+  it('uses plain labels and hides noise', async () => {
+    const withTransfers: Category[] = [
+      ...categories,
+      { id: 'xfer', name: 'Transfers', monthlyLimitPence: 0, excludedFromSpending: true },
+      { id: 'empty', name: 'Empty', monthlyLimitPence: 0, excludedFromSpending: false },
+    ]
+    const d = data({
+      categories: withTransfers,
+      txs: [...txs, tx('lost', -100, { categoryId: 'gone' })],
+      platforms: [{ id: 'hl', name: 'Hargreaves Lansdown', wrappersSupported: ['isa'], notes: '', lastChecked: '2026-01-01' }],
+      monthText: '25 Sep 2026 to 24 Oct 2026',
+    })
+    const wb = await load(d)
+    const bva = wb.getWorksheet('Budget vs Actual')!
+    expect(find(bva, 'Transfers')).toBeUndefined()
+    expect(find(bva, 'Empty')).toBeUndefined()
+    const names: unknown[] = []
+    bva.eachRow((r) => names.push(r.getCell(1).value))
+    expect(names).toEqual(expect.arrayContaining(['Groceries', 'Fun']))
+    expect(find3(wb.getWorksheet('Transactions')!, 'lost')!.getCell(5).value).toBe('Unknown category')
+    const debtsWs = wb.getWorksheet('Debts')!
+    expect(find(debtsWs, 'Card')!.getCell(2).value).toBe('Credit card')
+    expect(find(debtsWs, 'Loan')!.getCell(2).value).toBe('Loan')
+    expect(find(debtsWs, 'Card')!.getCell(5).value).toBeCloseTo(0.229)
+    const plan = wb.getWorksheet('Investment Plan')!
+    const texts: unknown[] = []
+    plan.eachRow((r) => r.eachCell((c) => texts.push(c.value)))
+    expect(texts).toEqual(expect.arrayContaining(['Hargreaves Lansdown', 'Growth', 'Used this tax year (to date)']))
+    expect(find(wb.getWorksheet('Summary')!, 'Month')!.getCell(2).value).toBe('25 Sep 2026 to 24 Oct 2026')
+  })
+
+  it('rounds percent cells to one decimal place', async () => {
+    const odd: Debt[] = [{ id: 'x', name: 'Odd APR', kind: 'card', balancePence: 123457, creditLimitOrOriginalPence: 300000, aprPercent: 22.94, minimumPaymentPence: 1 }]
+    const ws = (await load(data({ debts: odd }))).getWorksheet('Debts')!
+    const row = find(ws, 'Odd APR')!
+    expect(row.getCell(5).value).toBe(0.229)
+    expect(row.getCell(7).value).toBe(0.412)
   })
 
   it('builds with everything empty', async () => {
@@ -168,7 +223,7 @@ describe('buildWorkbook', () => {
     const wb = await load(data({ summary, txs: [], categories: [], streams: [], debts: [], savings: [], sinking: [], plan: null, log: [], accounts: [] }))
     expect(wb.worksheets).toHaveLength(7)
     const ws = wb.getWorksheet('Investment Plan')!
-    expect(find(ws, 'No plan for this month.')).toBeTruthy()
+    expect(find(ws, 'A plan is only worked out for the current budget month.')).toBeTruthy()
     expect(find(wb.getWorksheet('Debts')!, 'Total')!.getCell(3).result).toBe(0)
     expect(find(wb.getWorksheet('Income by Stream')!, 'Total')!.getCell(2).result).toBe(0)
   })

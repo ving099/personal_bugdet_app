@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -73,7 +73,7 @@ describe('Budget: categories and progress', () => {
     const db = await freshDb()
     await db.categories.update('groceries-and-food', { monthlyLimitPence: 25000 })
     await setup(db, [tx({ description: 'TESCO STORES 4412', amountPence: -4000, categoryId: 'groceries-and-food' })])
-    expect(await screen.findByText('£40.00 of £250.00')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('£40.00 of £250.00')).toBeInTheDocument())
     const bar = screen.getByRole('progressbar', { name: 'Groceries and food' })
     expect(bar).toHaveAttribute('aria-valuenow', '4000')
     expect(bar).toHaveAttribute('aria-valuemax', '25000')
@@ -96,16 +96,16 @@ describe('Budget: categories and progress', () => {
     const db = await freshDb()
     await setup(db, [tx({ amountPence: -2500, categoryId: 'travel' })])
     const travel = await rowButton('Travel')
-    expect(within(travel).getByText('£25.00 spent')).toBeInTheDocument()
-    expect(within(travel).getByText('No limit set')).toBeInTheDocument()
+    await waitFor(() => expect(within(travel).getByText('£25.00 spent')).toBeInTheDocument())
+    await waitFor(() => expect(within(travel).getByText('No limit set')).toBeInTheDocument())
   })
 
   it('says how far over the limit a category is, in text and with the over fill', async () => {
     const db = await freshDb()
     await db.categories.update('eating-out', { monthlyLimitPence: 10000 })
     await setup(db, [tx({ amountPence: -12000, categoryId: 'eating-out' })])
-    expect(await screen.findByText('£120.00 of £100.00')).toBeInTheDocument()
-    expect(screen.getByText('Over by £20.00')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('£120.00 of £100.00')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Over by £20.00')).toBeInTheDocument())
     const bar = screen.getByRole('progressbar', { name: 'Eating out' })
     expect(bar).toHaveAttribute('aria-valuetext', '£120.00 of £100.00. Over by £20.00')
     expect(bar.firstElementChild).toHaveAttribute('data-over')
@@ -121,8 +121,8 @@ describe('Budget: categories and progress', () => {
       tx({ description: 'ZARA 2', amountPence: 1500, categoryId: 'clothes', isRefund: true }),
       tx({ description: 'MOONPIG 1', amountPence: 1000, categoryId: 'gifts', isRefund: true }),
     ])
-    expect(await screen.findByText('£35.00 of £200.00')).toBeInTheDocument()
-    expect(screen.getByText('Refunds £10.00')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('£35.00 of £200.00')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Refunds £10.00')).toBeInTheDocument())
     const bar = screen.getByRole('progressbar', { name: 'Gifts' })
     expect(bar).toHaveAttribute('aria-valuenow', '0')
     expect(bar.firstElementChild).toHaveStyle({ width: '0%' })
@@ -149,8 +149,8 @@ describe('Budget: categories and progress', () => {
     ])
     const list = await screen.findByRole('list', { name: 'Spending by category' })
     expect(list.firstElementChild).toHaveTextContent('Uncategorised')
-    expect(within(list.firstElementChild as HTMLElement).getByText('2 transactions.')).toBeInTheDocument()
-    expect(screen.getByText('Pick a category so these count properly.')).toBeInTheDocument()
+    await waitFor(() => expect(within(list.firstElementChild as HTMLElement).getByText('2 transactions.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Pick a category so these count properly.')).toBeInTheDocument())
   })
 
   it('expands one category at a time to show its transactions with chips', async () => {
@@ -166,12 +166,12 @@ describe('Budget: categories and progress', () => {
     const user = userEvent.setup()
     await user.click(groceries)
     const lidl = (await screen.findByText('LIDL 1')).closest('li')!
-    expect(within(lidl).getByText('12 Oct 2026')).toBeInTheDocument()
-    expect(within(lidl).getByText('-£15.00')).toBeInTheDocument()
+    await waitFor(() => expect(within(lidl).getByText('12 Oct 2026')).toBeInTheDocument())
+    await waitFor(() => expect(within(lidl).getByText('-£15.00')).toBeInTheDocument())
     const back = screen.getByText('LIDL BACK').closest('li')!
-    expect(within(back).getByText('Refund')).toBeInTheDocument()
+    await waitFor(() => expect(within(back).getByText('Refund')).toBeInTheDocument())
     await user.click(await rowButton('Travel'))
-    expect(await screen.findByText('RAIL')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('RAIL')).toBeInTheDocument())
     expect(screen.queryByText('LIDL 1')).not.toBeInTheDocument()
   })
 
@@ -189,13 +189,13 @@ describe('Budget: categories and progress', () => {
   it('shows an import prompt with no transactions, and still lets you set a limit', async () => {
     const db = await freshDb()
     const user = await setup(db)
-    expect(await screen.findByText('Import a statement to see where your money goes.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Import a statement to see where your money goes.')).toBeInTheDocument())
     await user.click(await rowButton('Travel'))
     await user.type(screen.getByLabelText('Set monthly limit'), '150')
     await user.click(screen.getByRole('button', { name: 'Save limit' }))
-    expect(await screen.findByText('Limit saved for Travel.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Limit saved for Travel.')).toBeInTheDocument())
     expect((await db.categories.get('travel'))?.monthlyLimitPence).toBe(15000)
-    expect(await screen.findByText('£0.00 of £150.00')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('£0.00 of £150.00')).toBeInTheDocument())
   })
 })
 
@@ -206,17 +206,17 @@ describe('Budget: months', () => {
       tx({ date: '2026-10-25', amountPence: -1000, categoryId: 'travel' }),
       tx({ date: '2026-10-24', amountPence: -2000, categoryId: 'travel' }),
     ])
-    expect(await screen.findByLabelText('Budget month')).toHaveValue('2026-10')
-    expect(screen.getByText('25 Oct – 24 Nov 2026')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Budget month')).toHaveValue('2026-10'))
+    await waitFor(() => expect(screen.getByText('25 Oct – 24 Nov 2026')).toBeInTheDocument())
     expect(spentFigure()).toBe('£10.00')
     await user.click(screen.getByRole('button', { name: 'Previous month' }))
-    expect(screen.getByLabelText('Budget month')).toHaveValue('2026-09')
-    expect(screen.getByText('25 Sep – 24 Oct 2026')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Budget month')).toHaveValue('2026-09'))
+    await waitFor(() => expect(screen.getByText('25 Sep – 24 Oct 2026')).toBeInTheDocument())
     expect(spentFigure()).toBe('£20.00')
-    expect(screen.getByRole('button', { name: 'Previous month' })).toHaveAttribute('aria-disabled', 'true')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Previous month' })).toHaveAttribute('aria-disabled', 'true'))
     await user.click(screen.getByRole('button', { name: 'Next month' }))
-    expect(screen.getByLabelText('Budget month')).toHaveValue('2026-10')
-    expect(screen.getByRole('button', { name: 'Next month' })).toHaveAttribute('aria-disabled', 'true')
+    await waitFor(() => expect(screen.getByLabelText('Budget month')).toHaveValue('2026-10'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next month' })).toHaveAttribute('aria-disabled', 'true'))
   })
 
   it('jumps to a month with the select and lists months back to the earliest transaction', async () => {
@@ -227,7 +227,7 @@ describe('Budget: months', () => {
       'October 2026', 'September 2026', 'August 2026', 'July 2026',
     ])
     await user.selectOptions(select, 'July 2026')
-    expect(await screen.findByText('£5.00 spent')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('£5.00 spent')).toBeInTheDocument())
   })
 })
 
@@ -244,7 +244,7 @@ describe('Budget: re-categorise and learned rules', () => {
     const user = await setup(db, acme())
     await user.click(await rowButton('Uncategorised'))
     await recategorise(user, 'ACME WIDGETS 1', 'Entertainment')
-    expect(await screen.findByText('Updated 2 similar transactions.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Updated 2 similar transactions.')).toBeInTheDocument())
     const rows = await db.transactions.toArray()
     expect(rows.filter((t) => t.description.startsWith('ACME')).map((t) => t.categoryId)).toEqual(['entertainment', 'entertainment', 'entertainment'])
     expect(rows.find((t) => t.description === 'OTHER THING')?.categoryId).toBeUndefined()
@@ -267,7 +267,7 @@ describe('Budget: re-categorise and learned rules', () => {
     const user = await setup(db, acme())
     await user.click(await rowButton('Uncategorised'))
     await recategorise(user, 'ACME WIDGETS 1', 'Entertainment', false)
-    expect(await screen.findByText('Category changed.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Category changed.')).toBeInTheDocument())
     const rows = await db.transactions.toArray()
     expect(rows.filter((t) => t.categoryId === 'entertainment').map((t) => t.description)).toEqual(['ACME WIDGETS 1'])
     expect(await db.rules.count()).toBe(0)
@@ -281,7 +281,7 @@ describe('Budget: re-categorise and learned rules', () => {
     ])
     await user.click(await rowButton('Groceries and food'))
     await recategorise(user, 'TESCO STORES 1', 'Gifts')
-    expect(await screen.findByText('Updated 1 similar transaction.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Updated 1 similar transaction.')).toBeInTheDocument())
     expect(await db.rules.count()).toBe(1)
     await user.click(await rowButton('Gifts'))
     await recategorise(user, 'TESCO STORES 1', 'Groceries and food')
@@ -310,9 +310,9 @@ describe('Budget: re-categorise and learned rules', () => {
     await user.click(opener)
     const dialog = await screen.findByRole('dialog', { name: 'Change category' })
     expect(dialog).toHaveAttribute('aria-modal', 'true')
-    expect(within(dialog).getByLabelText('Category')).toHaveFocus()
+    await waitFor(() => expect(within(dialog).getByLabelText('Category')).toHaveFocus())
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Choose a category.')
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('Choose a category.'))
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(opener).toHaveFocus()
@@ -325,8 +325,8 @@ describe('Budget: re-categorise and learned rules', () => {
     await user.click(await rowButton('Uncategorised'))
     const spy = vi.spyOn(db, 'transaction').mockImplementationOnce(() => Promise.reject(new Error('disk')) as never)
     await recategorise(user, 'ACME WIDGETS 1', 'Entertainment')
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save that. Nothing was changed.")
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't save that. Nothing was changed."))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
     spy.mockRestore()
     expect((await db.transactions.toArray()).every((t) => t.categoryId === undefined)).toBe(true)
   })
@@ -400,9 +400,9 @@ describe('Budget: small behaviours', () => {
     await user.click(within(row).getByRole('button', { name: /Change category/ }))
     const dialog = await screen.findByRole('dialog')
     await user.selectOptions(within(dialog).getByLabelText('Category'), 'Gifts')
-    expect(within(dialog).getByText(/Also changes 2 other transactions/)).toBeInTheDocument()
+    await waitFor(() => expect(within(dialog).getByText(/Also changes 2 other transactions/)).toBeInTheDocument())
     await user.selectOptions(within(dialog).getByLabelText('Category'), 'Entertainment')
-    expect(within(dialog).getByText(/Also changes 1 other transaction /)).toBeInTheDocument()
+    await waitFor(() => expect(within(dialog).getByText(/Also changes 1 other transaction /)).toBeInTheDocument())
   })
 })
 
@@ -415,16 +415,16 @@ describe('Budget: flags', () => {
     ])
     const row = (await screen.findByText('SHOPCO CREDIT')).closest('li')!
     await user.click(within(row).getByRole('button', { name: /Flags/ }))
-    expect(within(row).getByText(/Importing another statement can flag matching transfers again/)).toBeInTheDocument()
+    await waitFor(() => expect(within(row).getByText(/Importing another statement can flag matching transfers again/)).toBeInTheDocument())
     await user.click(within(row).getByRole('checkbox', { name: 'This is a refund' }))
-    expect(await screen.findByText('Marked as a refund.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Marked as a refund.')).toBeInTheDocument())
     expect((await db.transactions.toArray()).find((t) => t.description === 'SHOPCO CREDIT')?.isRefund).toBe(true)
-    expect(await within(await rowButton('Clothes')).findByText('£35.00 spent')).toBeInTheDocument()
+    await waitFor(async () => expect(within(await rowButton('Clothes')).getByText('£35.00 spent')).toBeInTheDocument())
     expect(screen.queryByText('Unassigned income')).not.toBeInTheDocument()
     // It can be flipped back from the category list, where the Refund chip shows.
     await user.click(await rowButton('Clothes'))
     const listed = (await screen.findAllByText('SHOPCO CREDIT')).map((e) => e.closest('li')!).find((li) => li.closest('.cat'))!
-    expect(within(listed).getByText('Refund')).toBeInTheDocument()
+    await waitFor(() => expect(within(listed).getByText('Refund')).toBeInTheDocument())
     await user.click(within(listed).getByRole('button', { name: /Flags/ }))
     await user.click(within(listed).getByRole('checkbox', { name: 'This is a refund' }))
     await screen.findByText('No longer a refund.')
@@ -438,7 +438,7 @@ describe('Budget: flags', () => {
     const row = (await screen.findByText('MOVE')).closest('li')!
     await user.click(within(row).getByRole('button', { name: /Flags/ }))
     await user.click(within(row).getByRole('checkbox', { name: 'This is a transfer' }))
-    expect(await within(row).findByText('Transfer')).toBeInTheDocument()
+    await waitFor(() => expect(within(row).getByText('Transfer')).toBeInTheDocument())
     expect((await db.transactions.toArray())[0].isTransfer).toBe(true)
     await screen.findByText('Marked as a transfer.')
     await vi.waitFor(() => expect(spentFigure()).toBe('£0.00'))
@@ -453,13 +453,13 @@ describe('Budget: category limits', () => {
     const input = await screen.findByLabelText('Set monthly limit')
     await user.type(input, '250')
     await user.click(screen.getByRole('button', { name: 'Save limit' }))
-    expect(await screen.findByText('£40.00 of £250.00')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('£40.00 of £250.00')).toBeInTheDocument())
     expect((await db.categories.get('groceries-and-food'))?.monthlyLimitPence).toBe(25000)
     await user.clear(screen.getByLabelText('Set monthly limit'))
     await user.click(screen.getByRole('button', { name: 'Save limit' }))
-    expect(await screen.findByText('Limit removed for Groceries and food.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Limit removed for Groceries and food.')).toBeInTheDocument())
     expect((await db.categories.get('groceries-and-food'))?.monthlyLimitPence).toBe(0)
-    expect(within(await rowButton('Groceries and food')).getByText('No limit set')).toBeInTheDocument()
+    await waitFor(async () => expect(within(await rowButton('Groceries and food')).getByText('No limit set')).toBeInTheDocument())
   })
 
   it('rejects an unreadable limit and writes nothing', async () => {
@@ -468,7 +468,7 @@ describe('Budget: category limits', () => {
     await user.click(await rowButton('Travel'))
     await user.type(await screen.findByLabelText('Set monthly limit'), 'abc')
     await user.click(screen.getByRole('button', { name: 'Save limit' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Enter an amount like 250.00')
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Enter an amount like 250.00'))
     expect((await db.categories.get('travel'))?.monthlyLimitPence).toBe(0)
   })
 })
@@ -486,10 +486,10 @@ describe('Budget: income by stream', () => {
     await setup(db, [tx({ description: 'EMPLOYER', amountPence: 250000, incomeStreamId: 'salary' }), ...pay().slice(0, 1)])
     const section = (await screen.findByRole('heading', { name: 'Income' })).closest('section')!
     const stream = within(section).getByText('Salary').closest('li')!
-    expect(within(stream).getByText('£2,500.00')).toBeInTheDocument()
-    expect(within(stream).getByText('£3,000.00')).toBeInTheDocument()
+    await waitFor(() => expect(within(stream).getByText('£2,500.00')).toBeInTheDocument())
+    await waitFor(() => expect(within(stream).getByText('£3,000.00')).toBeInTheDocument())
     const un = within(section).getByText('Unassigned income').closest('li')!
-    expect(within(un).getByText('ACME PAYROLL 0926')).toBeInTheDocument()
+    await waitFor(() => expect(within(un).getByText('ACME PAYROLL 0926')).toBeInTheDocument())
   })
 
   it('assigns a credit and, by default, every similar credit in any month, leaving refunds alone', async () => {
@@ -499,9 +499,9 @@ describe('Budget: income by stream', () => {
     const row = within(un).getByText('ACME PAYROLL 0926').closest('li')!
     await user.click(within(row).getByRole('button', { name: /Assign/ }))
     await user.selectOptions(within(row).getByLabelText('Assign to stream'), 'Salary')
-    expect(within(row).getByRole('checkbox', { name: 'Apply to all similar' })).toBeChecked()
+    await waitFor(() => expect(within(row).getByRole('checkbox', { name: 'Apply to all similar' })).toBeChecked())
     await user.click(within(row).getByRole('button', { name: 'Save' }))
-    expect(await screen.findByText('Assigned 2 credits.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Assigned 2 credits.')).toBeInTheDocument())
     const rows = await db.transactions.toArray()
     const by = Object.fromEntries(rows.map((t) => [t.description, t.incomeStreamId]))
     expect(by['ACME PAYROLL 0926']).toBe('salary')
@@ -528,7 +528,7 @@ describe('Budget: income by stream', () => {
     const row = (await screen.findByText('FREELANCE JOB')).closest('li')!
     await user.click(within(row).getByRole('button', { name: /Assign/ }))
     await user.click(within(row).getByRole('button', { name: 'Save' }))
-    expect(await within(row).findByRole('alert')).toHaveTextContent('Choose a stream.')
+    await waitFor(() => expect(within(row).getByRole('alert')).toHaveTextContent('Choose a stream.'))
   })
 
   it('adds an income stream inline when there are none, then assigns to it', async () => {
@@ -538,9 +538,9 @@ describe('Budget: income by stream', () => {
     await user.type(screen.getByLabelText('Stream name'), 'Freelance')
     await user.type(screen.getByLabelText('Expected monthly net amount'), '500')
     await user.click(screen.getByRole('button', { name: 'Add stream' }))
-    expect(await screen.findByText('Added Freelance.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Added Freelance.')).toBeInTheDocument())
     expect(await db.incomeStreams.toArray()).toMatchObject([{ label: 'Freelance', expectedMonthlyNetPence: 50000 }])
-    expect(screen.getByRole('button', { name: 'Add income stream' })).toHaveFocus()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add income stream' })).toHaveFocus())
     const row = (await screen.findByText('FREELANCE JOB')).closest('li')!
     await user.click(within(row).getByRole('button', { name: /Assign/ }))
     await user.selectOptions(within(row).getByLabelText('Assign to stream'), 'Freelance')
@@ -554,7 +554,7 @@ describe('Budget: income by stream', () => {
     const user = await setup(db)
     await user.click(await screen.findByRole('button', { name: 'Add income stream' }))
     await user.click(screen.getByRole('button', { name: 'Add stream' }))
-    expect(await screen.findByText('Enter a name')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Enter a name')).toBeInTheDocument())
     expect(await db.incomeStreams.count()).toBe(0)
   })
 
