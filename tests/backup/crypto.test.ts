@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BACKUP_PBKDF2_ITERATIONS, InvalidBackupError, WrongPassphraseError, decryptBackup, encryptBackup,
+  BACKUP_PBKDF2_ITERATIONS, InvalidBackupError, WrongPassphraseError, decryptBackup, deriveKey, encryptBackup,
 } from '../../src/backup/crypto'
 
 const ITER = 1000
@@ -25,11 +25,41 @@ describe('backup crypto', () => {
   })
 
   it('rejects a flipped byte in iterations, salt or iv', async () => {
-    for (const i of [8, 10, 20, 40]) {
+    // header: magic 0-3, version 4, iterations 5-8, salt 9-24, iv 25-36, ciphertext from 37
+    for (const i of [8, 10, 20, 30]) {
       const enc = await encryptBackup(text, 'pw', ITER)
       enc[i] ^= 1
       await expect(decryptBackup(enc, 'pw')).rejects.toBeInstanceOf(WrongPassphraseError)
     }
+  })
+
+  it('binds the header as AAD', async () => {
+    const enc = await encryptBackup(text, 'pw', ITER)
+    const key = await deriveKey('pw', enc.slice(9, 25), ITER)
+    const iv = enc.slice(25, 37)
+    const ct = enc.slice(37)
+    const header = enc.slice(0, 37)
+    await expect(crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)).rejects.toThrow()
+    const withAad = { name: 'AES-GCM', iv, additionalData: header }
+    await expect(crypto.subtle.decrypt(withAad, key, ct)).resolves.toBeDefined()
+  })
+
+  it('treats NFC and NFD passphrases as equal', async () => {
+    const nfc = 'caf\u00e9'
+    const nfd = 'cafe\u0301'
+    expect(nfc).not.toBe(nfd)
+    expect(await decryptBackup(await encryptBackup(text, nfc, ITER), nfd)).toBe(text)
+    expect(await decryptBackup(await encryptBackup(text, nfd, ITER), nfc)).toBe(text)
+  })
+
+  it('rejects out-of-range header iterations as invalid', async () => {
+    const setIter = async (n: number) => {
+      const enc = await encryptBackup(text, 'pw', ITER)
+      new DataView(enc.buffer).setUint32(5, n, false)
+      return enc
+    }
+    await expect(decryptBackup(await setIter(0), 'pw')).rejects.toBeInstanceOf(InvalidBackupError)
+    await expect(decryptBackup(await setIter(5_000_001), 'pw')).rejects.toBeInstanceOf(InvalidBackupError)
   })
 
   it('rejects a truncated file', async () => {

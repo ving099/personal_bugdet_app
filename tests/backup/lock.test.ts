@@ -7,6 +7,10 @@ describe('passcode', () => {
     expect(await verifyPasscode('123456', stored, 1000)).toBe(true)
     expect(await verifyPasscode('654321', stored, 1000)).toBe(false)
   })
+  it('treats NFC and NFD passcodes as equal', async () => {
+    const stored = await hashPasscode('caf\u00e9', 1000)
+    expect(await verifyPasscode('cafe\u0301', stored, 1000)).toBe(true)
+  })
   it('uses a fresh salt each time', async () => {
     const a = await hashPasscode('123456', 1000)
     const b = await hashPasscode('123456', 1000)

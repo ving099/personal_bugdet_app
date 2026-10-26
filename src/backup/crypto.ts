@@ -15,7 +15,7 @@ const SALT_LEN = 16
 const IV_LEN = 12
 const HEADER_LEN = 4 + 1 + 4 + SALT_LEN + IV_LEN
 const TAG_LEN = 16
-const MAX_ITERATIONS = 10_000_000 // sanity cap so a hostile header cannot hang the device
+const MAX_ITERATIONS = 5_000_000 // sanity cap so a hostile header cannot hang the device
 
 /** Authentication failed: wrong passphrase, or the file was altered or truncated. */
 export class WrongPassphraseError extends Error {
@@ -47,10 +47,18 @@ export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   return out
 }
 
+/**
+ * UTF-8 bytes of a user-typed secret, normalised to NFC first so the same visible text typed on
+ * different keyboards/OSes (e.g. NFC vs NFD 'café') derives the same key.
+ */
+export function secretBytes(secret: string): Uint8Array<ArrayBuffer> {
+  return new TextEncoder().encode(secret.normalize('NFC'))
+}
+
 /** Derives an AES-GCM-256 key from a secret with PBKDF2-SHA-256. */
 export async function deriveKey(secret: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<CryptoKey> {
   const subtle = globalThis.crypto.subtle
-  const material = await subtle.importKey('raw', new TextEncoder().encode(secret), 'PBKDF2', false, ['deriveKey'])
+  const material = await subtle.importKey('raw', secretBytes(secret), 'PBKDF2', false, ['deriveKey'])
   return subtle.deriveKey(
     { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
     material,
@@ -96,7 +104,7 @@ export async function decryptBackup(bytes: Uint8Array, passphrase: string): Prom
   if (bytes[4] !== FORMAT_VERSION) throw new InvalidBackupError('Unsupported backup version')
   const header = bytes.slice(0, HEADER_LEN)
   const iterations = new DataView(header.buffer).getUint32(5, false)
-  if (iterations < 1 || iterations > MAX_ITERATIONS) throw new WrongPassphraseError()
+  if (iterations < 1 || iterations > MAX_ITERATIONS) throw new InvalidBackupError('Invalid backup header')
   const salt = header.slice(9, 9 + SALT_LEN)
   const iv = header.slice(9 + SALT_LEN, HEADER_LEN)
   try {

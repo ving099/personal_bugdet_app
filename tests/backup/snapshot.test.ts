@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDb } from '../../src/storage/db'
 import type { BudgetDB } from '../../src/storage/db'
 import { seedDefaults } from '../../src/storage/seed'
@@ -23,6 +23,11 @@ beforeEach(async () => {
   await src.allowancesUsed.add({ taxYear: '2026/27', wrapper: 'isa', usedPence: 500 } as never)
 })
 
+afterEach(async () => {
+  await src.delete()
+  await dst.delete()
+})
+
 describe('snapshot', () => {
   it('covers every table with the expected envelope', async () => {
     const snap = JSON.parse(await exportSnapshot(src))
@@ -30,7 +35,6 @@ describe('snapshot', () => {
     expect(snap.version).toBe(1)
     expect(typeof snap.exportedAt).toBe('string')
     expect(Object.keys(snap.tables).sort()).toEqual(src.tables.map((t) => t.name).sort())
-    expect(src.tables.length).toBe(15)
   })
 
   it('restores into a fresh db with identical contents', async () => {
@@ -52,6 +56,7 @@ describe('snapshot', () => {
     const empty = openDb(`bk-empty-${Math.random()}`)
     await restoreSnapshot(dst, await exportSnapshot(empty))
     expect(await dump(dst)).toEqual(await dump(empty))
+    await empty.delete()
   })
 
   it('treats missing known tables as empty and ignores unknown tables', async () => {

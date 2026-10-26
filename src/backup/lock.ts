@@ -1,4 +1,4 @@
-import { base64ToBytes, bytesToBase64 } from './crypto'
+import { base64ToBytes, bytesToBase64, secretBytes } from './crypto'
 import type { ISODate } from '../domain/types'
 
 /** PBKDF2 work factor for passcodes. The salt is stored; the count is implicit (change = re-set passcode). */
@@ -6,7 +6,7 @@ export const PASSCODE_PBKDF2_ITERATIONS = 600_000
 
 async function derive(passcode: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<Uint8Array> {
   const subtle = globalThis.crypto.subtle
-  const material = await subtle.importKey('raw', new TextEncoder().encode(passcode), 'PBKDF2', false, ['deriveBits'])
+  const material = await subtle.importKey('raw', secretBytes(passcode), 'PBKDF2', false, ['deriveBits'])
   const bits = await subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, material, 256)
   return new Uint8Array(bits)
 }
@@ -25,7 +25,10 @@ export async function hashPasscode(
   return { salt: bytesToBase64(salt), hash: bytesToBase64(await derive(passcode, salt, iterations)) }
 }
 
-/** Recomputes and compares in constant time. Malformed stored values give false. */
+/**
+ * Recomputes and compares in constant time. Malformed stored values give false. An empty passcode throws
+ * RangeError, so the lock screen must guard empty submits.
+ */
 export async function verifyPasscode(
   passcode: string,
   stored: { salt: string; hash: string },

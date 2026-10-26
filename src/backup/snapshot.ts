@@ -1,6 +1,7 @@
 import type { BudgetDB } from '../storage/db'
 
 const APP = 'budget'
+/** Snapshot format version: bump whenever table shapes change. */
 const VERSION = 1
 
 /** The snapshot JSON is unusable (corrupt, wrong app, unsupported version, malformed tables). */
