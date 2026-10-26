@@ -8,6 +8,12 @@ export function parseMonth(month: string): { y: number; m: number } {
   return { y: Number(match[1]), m }
 }
 
+export function assertStartDay(startDay: number): void {
+  if (!Number.isInteger(startDay) || startDay < 1 || startDay > 31) {
+    throw new Error(`Invalid budget start day ${startDay}, expected an integer 1-31`)
+  }
+}
+
 /** Month `delta` months from `month` ('YYYY-MM'); correct across year boundaries. */
 export function shiftMonth(month: string, delta: number): string {
   const { y, m } = parseMonth(month)

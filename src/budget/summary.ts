@@ -1,21 +1,27 @@
 import { isSpendingTx } from '../import/matching'
 import type { Account, Category, IncomeStream, Pence, SinkingFund, Transaction } from '../domain/types'
-import { parseMonth, previousMonths, txsInMonth } from './months'
+import { assertStartDay, parseMonth, previousMonths, txsInMonth } from './months'
 
 const WINDOW = 3
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
 
-/** Spend rows count: spending-account, non-transfer, outflow or flagged refund, category not excluded. */
-function spendDelta(tx: Transaction, accounts: Account[], excluded: Set<string>): Pence | null {
+type Flow = { kind: 'spend'; pence: Pence } | { kind: 'income'; pence: Pence } | null
+
+const excludedSet = (categories?: Category[]) => new Set((categories ?? []).filter((c) => c.excludedFromSpending).map((c) => c.id))
+
+/**
+ * The single rule for what a row means to the budget. Rows that are transfers, on non-spending
+ * (business/savings) accounts, or in an excludedFromSpending category are ignored entirely.
+ * Outflows and flagged refunds are spend (positive pence for outflows, negative for refunds);
+ * other positive rows are income.
+ */
+function classify(tx: Transaction, accounts: Account[], excluded: Set<string>): Flow {
   if (!isSpendingTx(tx, accounts)) return null
   if (tx.categoryId && excluded.has(tx.categoryId)) return null
-  if (tx.amountPence < 0) return -tx.amountPence
-  if (tx.amountPence > 0 && tx.isRefund) return -tx.amountPence
+  if (tx.amountPence < 0) return { kind: 'spend', pence: -tx.amountPence }
+  if (tx.amountPence > 0 && tx.isRefund) return { kind: 'spend', pence: -tx.amountPence }
+  if (tx.amountPence > 0) return { kind: 'income', pence: tx.amountPence }
   return null
-}
-
-function isIncome(tx: Transaction, accounts: Account[]): boolean {
-  return tx.amountPence > 0 && !tx.isRefund && isSpendingTx(tx, accounts)
 }
 
 /**
@@ -39,17 +45,19 @@ export function monthSummary(input: {
   totalIncomePence: Pence
   leftPence: Pence
 } {
-  const excluded = new Set(input.categories.filter((c) => c.excludedFromSpending).map((c) => c.id))
+  parseMonth(input.month)
+  assertStartDay(input.startDay)
+  const excluded = excludedSet(input.categories)
   const spentByCategory: Record<string, Pence> = {}
   const incomeByStream: Record<string, Pence> = {}
   for (const tx of txsInMonth(input.txs, input.month, input.startDay)) {
-    const spend = spendDelta(tx, input.accounts, excluded)
-    if (spend !== null) {
+    const flow = classify(tx, input.accounts, excluded)
+    if (flow?.kind === 'spend') {
       const key = tx.categoryId ?? 'uncategorised'
-      spentByCategory[key] = (spentByCategory[key] ?? 0) + spend
-    } else if (isIncome(tx, input.accounts)) {
+      spentByCategory[key] = (spentByCategory[key] ?? 0) + flow.pence
+    } else if (flow?.kind === 'income') {
       const key = tx.incomeStreamId ?? 'unassigned'
-      incomeByStream[key] = (incomeByStream[key] ?? 0) + tx.amountPence
+      incomeByStream[key] = (incomeByStream[key] ?? 0) + flow.pence
     }
   }
   const totalSpentPence = sum(Object.values(spentByCategory))
@@ -57,49 +65,71 @@ export function monthSummary(input: {
   return { spentByCategory, totalSpentPence, incomeByStream, totalIncomePence, leftPence: totalIncomePence - totalSpentPence }
 }
 
-/** Mean spend over the previous up-to-`months` budget months (as-of month excluded) that have spending data. */
+/**
+ * Mean spend over the previous up-to-`months` budget months (as-of month excluded) that have spending data;
+ * a month counts as "having data" if it has any spend/refund row.
+ * Callers (e.g. the Invest composition) must pass `categories` so excludedFromSpending categories
+ * are ignored exactly as in monthSummary; when omitted, no category is excluded.
+ */
 export function trailingSpend(input: {
   asOfMonth: string
   startDay: number
   txs: Transaction[]
   accounts: Account[]
+  categories?: Category[]
   months?: number
 }): { averagePence: Pence; monthsUsed: number } {
   parseMonth(input.asOfMonth)
+  assertStartDay(input.startDay)
+  const excluded = excludedSet(input.categories)
   const totals: number[] = []
   for (const month of previousMonths(input.asOfMonth, input.months ?? WINDOW)) {
-    const rows = txsInMonth(input.txs, month, input.startDay).filter((t) => spendDelta(t, input.accounts, new Set()) !== null)
-    if (rows.length === 0) continue
-    totals.push(sum(rows.map((t) => spendDelta(t, input.accounts, new Set()) as number)))
+    const flows = txsInMonth(input.txs, month, input.startDay)
+      .map((t) => classify(t, input.accounts, excluded))
+      .filter((f) => f?.kind === 'spend')
+    if (flows.length === 0) continue
+    totals.push(sum(flows.map((f) => f!.pence)))
   }
   if (totals.length === 0) return { averagePence: 0, monthsUsed: 0 }
   return { averagePence: Math.round(sum(totals) / totals.length), monthsUsed: totals.length }
 }
 
-/** Per stream: lower of expected monthly net and trailing average actual; expected when no history. */
+/**
+ * Per stream: lower of expected monthly net and trailing average actual; expected when no history.
+ * Callers must pass `categories` so excludedFromSpending rows are not counted as income.
+ * `unassignedAveragePence` is informational only (trailing average of income with no stream, so the UI
+ * can prompt the user to assign one); it is NOT included in totalPence or perStream.
+ */
 export function smoothedIncome(input: {
   asOfMonth: string
   startDay: number
   txs: Transaction[]
   accounts: Account[]
   streams: IncomeStream[]
-}): { totalPence: Pence; perStream: Record<string, Pence>; monthsUsed: number } {
+  categories?: Category[]
+}): { totalPence: Pence; perStream: Record<string, Pence>; monthsUsed: number; unassignedAveragePence: Pence } {
   parseMonth(input.asOfMonth)
+  assertStartDay(input.startDay)
+  const excluded = excludedSet(input.categories)
   const history = previousMonths(input.asOfMonth, WINDOW).map((m) =>
-    txsInMonth(input.txs, m, input.startDay).filter((t) => isIncome(t, input.accounts)),
+    txsInMonth(input.txs, m, input.startDay).filter((t) => classify(t, input.accounts, excluded)?.kind === 'income'),
   )
+  const monthlyTotals = (match: (t: Transaction) => boolean) =>
+    history
+      .map((rows) => rows.filter(match))
+      .filter((rows) => rows.length > 0)
+      .map((rows) => sum(rows.map((t) => t.amountPence)))
   const perStream: Record<string, Pence> = {}
   let monthsUsed = 0
   for (const s of input.streams) {
-    const totals = history
-      .map((rows) => rows.filter((t) => t.incomeStreamId === s.id))
-      .filter((rows) => rows.length > 0)
-      .map((rows) => sum(rows.map((t) => t.amountPence)))
+    const totals = monthlyTotals((t) => t.incomeStreamId === s.id)
     monthsUsed = Math.max(monthsUsed, totals.length)
     perStream[s.id] =
       totals.length === 0 ? s.expectedMonthlyNetPence : Math.min(s.expectedMonthlyNetPence, Math.round(sum(totals) / totals.length))
   }
-  return { totalPence: sum(Object.values(perStream)), perStream, monthsUsed }
+  const un = monthlyTotals((t) => !t.incomeStreamId)
+  const unassignedAveragePence = un.length === 0 ? 0 : Math.round(sum(un) / un.length)
+  return { totalPence: sum(Object.values(perStream)), perStream, monthsUsed, unassignedAveragePence }
 }
 
 /** Monthly set-aside for sinking funds: each fund's yearly amount / 12, rounded to whole pence per fund. */

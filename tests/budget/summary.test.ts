@@ -125,7 +125,7 @@ describe('smoothedIncome', () => {
   it('uses the lower of expected and trailing actual average', () => {
     const txs = [tx('2026-09-28', 170000, { incomeStreamId: 's1' }), tx('2026-08-28', 170000, { incomeStreamId: 's1' })]
     const r = smoothedIncome({ asOfMonth: '2026-10', startDay: 1, txs, accounts, streams })
-    expect(r).toEqual({ totalPence: 170000, perStream: { s1: 170000 }, monthsUsed: 2 })
+    expect(r).toEqual({ totalPence: 170000, perStream: { s1: 170000 }, monthsUsed: 2, unassignedAveragePence: 0 })
   })
   it('caps at expected when actual is higher', () => {
     const txs = [tx('2026-09-28', 250000, { incomeStreamId: 's1' })]
@@ -136,6 +136,7 @@ describe('smoothedIncome', () => {
       totalPence: 200000,
       perStream: { s1: 200000 },
       monthsUsed: 0,
+      unassignedAveragePence: 0,
     })
   })
 })
@@ -152,5 +153,78 @@ describe('sinkingMonthlyPence', () => {
   })
   it('is zero for no funds', () => {
     expect(sinkingMonthlyPence([])).toBe(0)
+  })
+})
+
+describe('review fixes', () => {
+  const exCats: Category[] = [...categories, { id: 'tr', name: 'Transfers', monthlyLimitPence: 0, excludedFromSpending: true }]
+
+  it('trailingSpend with startDay 25 across a year boundary', () => {
+    // period 2025-12 = Dec 25 - Jan 24; 2025-11 = Nov 25 - Dec 24
+    const txs = [tx('2026-01-10', -4000), tx('2025-12-26', -2000), tx('2025-12-01', -6000), tx('2025-10-25', -9000)]
+    // asOf 2026-01: Dec(6000 from Dec25-Jan24 => 4000+2000), Nov(6000), Oct(9000)
+    expect(trailingSpend({ asOfMonth: '2026-01', startDay: 25, txs, accounts })).toEqual({ averagePence: 7000, monthsUsed: 3 })
+  })
+
+  it('trailingSpend honours excluded categories only when categories passed', () => {
+    const txs = [tx('2026-09-10', -5000, { categoryId: 'tr' }), tx('2026-09-11', -1000, { categoryId: 'groc' })]
+    const common = { asOfMonth: '2026-10', startDay: 1, txs, accounts }
+    expect(trailingSpend({ ...common, categories: exCats }).averagePence).toBe(1000)
+    expect(trailingSpend(common).averagePence).toBe(6000)
+  })
+
+  it('smoothedIncome with two streams, one without history', () => {
+    const two: IncomeStream[] = [...streams, { id: 's2', label: 'Side', expectedMonthlyNetPence: 50000 }]
+    const txs = [tx('2026-09-28', 150000, { incomeStreamId: 's1' })]
+    const r = smoothedIncome({ asOfMonth: '2026-10', startDay: 1, txs, accounts, streams: two })
+    expect(r.perStream).toEqual({ s1: 150000, s2: 50000 })
+    expect(r.totalPence).toBe(200000)
+    expect(r.monthsUsed).toBe(1)
+  })
+
+  it('smoothedIncome excludes transfer and business rows', () => {
+    const txs = [
+      tx('2026-09-28', 100000, { incomeStreamId: 's1', isTransfer: true }),
+      tx('2026-09-28', 100000, { incomeStreamId: 's1', accountId: 'biz' }),
+    ]
+    const r = smoothedIncome({ asOfMonth: '2026-10', startDay: 1, txs, accounts, streams })
+    expect(r.monthsUsed).toBe(0)
+    expect(r.perStream.s1).toBe(200000)
+  })
+
+  it('smoothedIncome ignores excluded-category income when categories passed', () => {
+    const txs = [tx('2026-09-28', 100000, { incomeStreamId: 's1', categoryId: 'tr' })]
+    const r = smoothedIncome({ asOfMonth: '2026-10', startDay: 1, txs, accounts, streams, categories: exCats })
+    expect(r.monthsUsed).toBe(0)
+  })
+
+  it('reports unassignedAveragePence without adding it to the total', () => {
+    const txs = [tx('2026-09-05', 30000), tx('2026-08-05', 10000), tx('2026-09-28', 100000, { incomeStreamId: 's1' })]
+    const r = smoothedIncome({ asOfMonth: '2026-10', startDay: 1, txs, accounts, streams })
+    expect(r.unassignedAveragePence).toBe(20000)
+    expect(r.totalPence).toBe(100000)
+    expect(r.perStream).toEqual({ s1: 100000 })
+  })
+
+  it('throws on invalid month or startDay', () => {
+    expect(() => trailingSpend({ asOfMonth: 'bad', startDay: 1, txs: [], accounts })).toThrow(/Invalid budget month/)
+    expect(() => smoothedIncome({ asOfMonth: '2026-00', startDay: 1, txs: [], accounts, streams })).toThrow(/Invalid budget month/)
+    expect(() => trailingSpend({ asOfMonth: '2026-10', startDay: 0, txs: [], accounts })).toThrow(/start day/)
+    expect(() => monthSummary({ ...base, startDay: 1.5, month: '2026-10', txs: [] })).toThrow(/start day/)
+  })
+
+  it('monthSummary does not count a positive excluded-category row as income', () => {
+    const r = monthSummary({ ...base, categories: exCats, month: '2026-10', txs: [tx('2026-10-03', 5000, { categoryId: 'tr' })] })
+    expect(r.totalIncomePence).toBe(0)
+    expect(r.incomeByStream).toEqual({})
+  })
+
+  it('does not mutate inputs', () => {
+    const txs = [tx('2026-09-10', -1000, { categoryId: 'groc' }), tx('2026-09-11', 5000, { incomeStreamId: 's1' })]
+    const snap = JSON.stringify({ txs, accounts, exCats, streams })
+    monthSummary({ ...base, categories: exCats, month: '2026-09', txs })
+    trailingSpend({ asOfMonth: '2026-10', startDay: 1, txs, accounts, categories: exCats })
+    smoothedIncome({ asOfMonth: '2026-10', startDay: 1, txs, accounts, streams, categories: exCats })
+    expect(JSON.stringify({ txs, accounts, exCats, streams })).toBe(snap)
   })
 })
