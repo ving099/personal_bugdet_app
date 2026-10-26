@@ -15,10 +15,14 @@ interface Props {
   platformId: string
   /** Added to the accessible names, e.g. ', logged for 2026/27'. */
   nameSuffix?: string
+  /** DOM id for the checkbox, so a parent can move focus to it. */
+  checkboxId?: string
+  /** Called after an untick has been saved (the row may be gone by then). */
+  onUnlogged?: () => void
 }
 
 /** One fund line: a checkbox that logs it, and once logged, the amount actually put in. */
-export default function PlanRowItem({ row, logged, month, taxYear, platformId, nameSuffix = '' }: Props) {
+export default function PlanRowItem({ row, logged, month, taxYear, platformId, nameSuffix = '', checkboxId, onUnlogged }: Props) {
   const db = useDb()
   const id = useId()
   const busy = useRef(false)
@@ -34,7 +38,10 @@ export default function PlanRowItem({ row, logged, month, taxYear, platformId, n
     setError('')
     try {
       if (on) await logPlanLine(db, { row, month, taxYear, actualPence: row.plannedPence, platformId })
-      else if (logged) await unlogPlanLine(db, logged.id)
+      else if (logged) {
+        await unlogPlanLine(db, logged.id)
+        onUnlogged?.()
+      }
       setAmount(null)
     } catch {
       setError(on ? "Couldn't log that. Nothing was changed." : "Couldn't undo that. Nothing was changed.")
@@ -65,7 +72,7 @@ export default function PlanRowItem({ row, logged, month, taxYear, platformId, n
       <div className="plan-line">
         {/* The label wraps the box, so its whole 48px cell (not just the 24px box) toggles the line. */}
         <label className="plan-label">
-          <input className="check-box" type="checkbox" checked={!!logged} aria-label={`Bought ${where}`}
+          <input id={checkboxId} className="check-box" type="checkbox" checked={!!logged} aria-label={`Bought ${where}`}
             onChange={(e) => void toggle(e.target.checked)} />
           <span className="plan-text">
             <span className="plan-fund">{row.name}</span>

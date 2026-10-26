@@ -359,3 +359,24 @@ describe('Invest and Debts agree', () => {
     expect(within(list).getByText('Extra payment on high-interest debt').closest('li')).toHaveTextContent('-£1,000.00')
   })
 })
+
+describe('Invest: focus after undoing a logged line', () => {
+  it('moves to the next logged line, then to the top heading when the section goes', async () => {
+    const db = await freshDb()
+    // Two lines logged for another tax year: they sit in "Logged this month" whatever the plan says.
+    await db.investmentLog.bulkAdd([
+      { id: 'a', month: '2026-10', taxYear: '2025/26', wrapper: 'isa', holdingId: 'growth-global', plannedPence: 1000, actualPence: 1000, platformId: 'p' },
+      { id: 'b', month: '2026-10', taxYear: '2025/26', wrapper: 'gia', holdingId: 'growth-global', plannedPence: 2000, actualPence: 2000, platformId: 'p' },
+    ])
+    const user = await setup(db)
+    const logged = await screen.findByRole('region', { name: 'Logged this month' })
+    const [first, second] = within(logged).getAllByRole('checkbox')
+    await user.click(first)
+    await waitFor(async () => expect(await db.investmentLog.count()).toBe(1))
+    await waitFor(() => expect(second).toHaveFocus())
+    await user.click(second)
+    await waitFor(async () => expect(await db.investmentLog.count()).toBe(0))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Logged this month' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invest this month' })).toHaveFocus())
+  })
+})

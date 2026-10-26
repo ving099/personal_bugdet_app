@@ -357,11 +357,12 @@ describe('Settings: appearance', () => {
   })
 })
 
-describe('Settings: backup placeholder', () => {
-  it('renders the backup and restore section for Task 19 to replace', async () => {
+describe('Settings: backup section', () => {
+  it('renders the backup and restore panel', async () => {
     renderSettings(await freshDb())
     const backup = await screen.findByRole('region', { name: 'Backup and restore' })
-    expect(within(backup).getByText('Download an encrypted backup or restore one on another device. Available once setup is complete.')).toBeInTheDocument()
+    expect(within(backup).getByRole('button', { name: 'Download encrypted backup' })).toBeInTheDocument()
+    expect(within(backup).getByRole('button', { name: 'Restore from backup…' })).toBeInTheDocument()
   })
 })
 

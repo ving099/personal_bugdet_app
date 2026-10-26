@@ -9,7 +9,7 @@ export default function InvestHero({ view }: { view: InvestView }) {
   const { investable } = view
   return (
     <Card className="invest-hero" labelledBy="invest-hero-heading">
-      <h2 className="invest-hero-heading" id="invest-hero-heading">Invest this month</h2>
+      <h2 className="invest-hero-heading" id="invest-hero-heading" tabIndex={-1}>Invest this month</h2>
       {investable.ok ? (
         <>
           {investState(investable) === 'invest' ? (

@@ -7,27 +7,29 @@ import { useDb } from '../../useDb'
 import { ALLOWANCE_WRAPPERS, buildInvestView, type InvestData, type InvestView, type PlanRow } from './investModel'
 
 /** Reads everything the investing engines need. Thin: no figures are worked out here. */
+export async function loadInvestData(db: BudgetDB): Promise<InvestData | undefined> {
+  const settings = await db.settings.get('main')
+  if (!settings) return undefined
+  return {
+    settings,
+    accounts: await db.accounts.toArray(),
+    categories: await db.categories.toArray(),
+    streams: await db.incomeStreams.toArray(),
+    txs: await db.transactions.toArray(),
+    debts: await db.debts.toArray(),
+    pots: await db.savingsPots.toArray(),
+    funds: await db.sinkingFunds.toArray(),
+    used: await db.allowancesUsed.toArray(),
+    holdings: await db.holdings.toArray(),
+    platforms: await db.platforms.toArray(),
+    opening: await db.openingHoldings.toArray(),
+    log: await db.investmentLog.toArray(),
+  }
+}
+
 export function useInvestData(): InvestData | undefined {
   const db = useDb()
-  return useLiveQuery(async (): Promise<InvestData | undefined> => {
-    const settings = await db.settings.get('main')
-    if (!settings) return undefined
-    return {
-      settings,
-      accounts: await db.accounts.toArray(),
-      categories: await db.categories.toArray(),
-      streams: await db.incomeStreams.toArray(),
-      txs: await db.transactions.toArray(),
-      debts: await db.debts.toArray(),
-      pots: await db.savingsPots.toArray(),
-      funds: await db.sinkingFunds.toArray(),
-      used: await db.allowancesUsed.toArray(),
-      holdings: await db.holdings.toArray(),
-      platforms: await db.platforms.toArray(),
-      opening: await db.openingHoldings.toArray(),
-      log: await db.investmentLog.toArray(),
-    }
-  }, [db])
+  return useLiveQuery(() => loadInvestData(db), [db])
 }
 
 /** The live plan for the budget month containing `today`. Home, Invest and Debts share it so they agree. */

@@ -1,3 +1,4 @@
+import { useDeferredFocus } from '../../useFocusFirst'
 import type { Holding, InvestmentLog } from '../../../domain/types'
 import { monthLabel } from '../budget/budgetModel'
 import type { InvestView, PlanRow } from './investModel'
@@ -18,18 +19,26 @@ function rowOf(log: InvestmentLog, holdings: Holding[]): PlanRow {
  * is nothing to invest now, or they count against another tax year). They can still be corrected or undone.
  */
 export default function LoggedSection({ view, holdings }: { view: InvestView; holdings: Holding[] }) {
+  const focus = useDeferredFocus(view.otherLogged)
   if (view.otherLogged.length === 0) return null
+  const checkId = (log: InvestmentLog) => `logged-check-${log.id}`
   return (
     <section className="invest-section" aria-labelledby="logged-heading">
-      <h2 className="invest-heading" id="logged-heading">Logged this month</h2>
+      <h2 className="invest-heading" id="logged-heading" tabIndex={-1}>Logged this month</h2>
       <p className="invest-intro">
         {`Lines you ticked off for ${monthLabel(view.month)} that are not in the plan above. Untick one to undo it; its allowance is given back.`}
       </p>
       <ul className="plan-list">
-        {view.otherLogged.map((log) => (
-          <PlanRowItem key={log.id} row={rowOf(log, holdings)} logged={log} month={log.month} taxYear={log.taxYear}
-            platformId={log.platformId} nameSuffix={`, logged for ${log.taxYear}`} />
-        ))}
+        {view.otherLogged.map((log, i) => {
+          // After an untick the row goes away: keep focus on the next row's box, else the section heading,
+          // else (the section itself disappears) the tab's top heading.
+          const next = view.otherLogged[i + 1] ?? view.otherLogged[i - 1]
+          return (
+            <PlanRowItem key={log.id} row={rowOf(log, holdings)} logged={log} month={log.month} taxYear={log.taxYear}
+              platformId={log.platformId} nameSuffix={`, logged for ${log.taxYear}`} checkboxId={checkId(log)}
+              onUnlogged={() => focus(...(next ? [checkId(next)] : []), 'logged-heading', 'invest-hero-heading')} />
+          )
+        })}
       </ul>
     </section>
   )

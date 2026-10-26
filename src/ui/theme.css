@@ -1792,3 +1792,34 @@ input {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+.export-row {
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.export-row .form-error {
+  margin: 12px 0 0;
+}
+
+.backup-panel .btn {
+  margin-bottom: 8px;
+}
+
+.backup-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+}
+
+.backup-file .btn {
+  margin-bottom: 0;
+}
+
+.backup-file-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink-muted);
+}

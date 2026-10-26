@@ -233,7 +233,7 @@ export default function Settings({ today = todayISO() }: { today?: string }) {
       <PlatformsSection settings={settings} today={today} />
       <AppLockSection appLock={settings.appLock} />
       <AppearanceSection settings={settings} />
-      <BackupSection />
+      <BackupSection today={today} />
       <DeleteSection />
     </div>
   )

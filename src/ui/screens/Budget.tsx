@@ -6,6 +6,7 @@ import { budgetMonthOf } from '../../domain/dates'
 import type { ISODate } from '../../domain/types'
 import Card from '../components/Card'
 import EmptyState from '../components/EmptyState'
+import ExportButton from '../components/ExportButton'
 import Money from '../components/Money'
 import { todayISO } from '../formValues'
 import { useDb } from '../useDb'
@@ -77,6 +78,7 @@ export default function Budget({ today = todayISO() }: { today?: ISODate }) {
         categories={data.categories}
       />
       <IncomeSection db={db} streams={data.streams} incomeByStream={summary.incomeByStream} credits={view.credits} />
+      <ExportButton month={month} today={today} />
     </div>
   )
 }

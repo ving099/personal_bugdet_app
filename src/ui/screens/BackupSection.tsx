@@ -1,12 +1,13 @@
+import type { ISODate } from '../../domain/types'
+import BackupPanel from '../components/BackupPanel'
+import { todayISO } from '../formValues'
 import { SettingsSection } from './SettingsSection'
 
-/** Placeholder. Task 19 replaces this file with the real encrypted backup and restore controls. */
-export default function BackupSection() {
+/** The Settings entry for encrypted backup and restore. The controls live in BackupPanel. */
+export default function BackupSection({ today = todayISO() }: { today?: ISODate }) {
   return (
     <SettingsSection title="Backup and restore">
-      <p className="settings-note">
-        Download an encrypted backup or restore one on another device. Available once setup is complete.
-      </p>
+      <BackupPanel today={today} />
     </SettingsSection>
   )
 }

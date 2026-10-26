@@ -3,6 +3,7 @@ import { txsInMonth } from '../../budget/months'
 import { monthSummary } from '../../budget/summary'
 import type { ISODate } from '../../domain/types'
 import EmptyState from '../components/EmptyState'
+import ExportButton from '../components/ExportButton'
 import Money from '../components/Money'
 import { Button } from '../components/forms'
 import { todayISO } from '../formValues'
@@ -77,6 +78,7 @@ export default function Home({ today = todayISO(), onNavigate = () => {} }: Prop
         </dl>
       </section>
       <NeedsAttention items={view.attention} onNavigate={onNavigate} />
+      <ExportButton month={view.month} today={today} />
     </div>
   )
 }
