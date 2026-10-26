@@ -38,7 +38,9 @@ export async function importFiles(
     for (const [i, file] of files.entries()) {
       const rows = file.rows.map((r) => {
         const categoryId = categorise(r.description, rules)
-        return categoryId === undefined ? r : { ...r, categoryId }
+        if (categoryId === undefined) return r
+        // A learned rule is the owner's own choice ("Apply to all similar"), so the row is marked as set by hand.
+        return categorise(r.description, learned) !== undefined ? { ...r, categoryId, categoryEditedByUser: true } : { ...r, categoryId }
       })
       const out = await importBatch(db, rows, { fileName: file.name, importedAt: new Date(now + i).toISOString() })
       results.push({ fileName: file.name, ...out })

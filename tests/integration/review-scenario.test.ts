@@ -171,3 +171,28 @@ describe('review scenario', () => {
     expect(buildInvestView(data, TODAY).investable.ok).toBe(true)
   })
 })
+
+describe('a category taught with "Apply to all similar" survives the next import (part 3)', () => {
+  it('a later ISA withdrawal filed under Transfers by a learned rule stays out of income', async () => {
+    const db = await fresh()
+    await db.settings.update('main', { budgetMonthStartDay: 1 })
+    await importFiles(db, [file('aug.csv', 'Date,Description,Amount\n2026-08-10,J SMITH ISA WITHDRAWAL,500.00\n', 'cur')])
+    const aug = (await db.transactions.toArray())[0]
+    await recategorise(db, aug.id, 'transfers', true)
+    await importFiles(db, [file('sep.csv', 'Date,Description,Amount\n2026-09-10,J SMITH ISA WITHDRAWAL,500.00\n', 'cur')])
+    const sepRow = (await db.transactions.toArray()).find((t) => t.date === '2026-09-10')!
+    expect(sepRow.categoryId).toBe('transfers')
+    expect(sepRow.categoryEditedByUser).toBe(true)
+    const data = (await loadInvestData(db))!
+    const sep = monthSummary({ month: '2026-09', startDay: 1, txs: data.txs, accounts, categories: data.categories, streams: data.streams })
+    expect(sep.totalIncomePence).toBe(0)
+  })
+
+  it('rows filed by the default rules are not marked as hand-filed', async () => {
+    const db = await fresh()
+    await importFiles(db, [file('a.csv', 'Date,Description,Amount\n2026-08-10,TRANSFER FROM BIZ LTD,500.00\n', 'cur')])
+    const row = (await db.transactions.toArray())[0]
+    expect(row.categoryId).toBe('transfers')
+    expect(row.categoryEditedByUser).toBeUndefined()
+  })
+})

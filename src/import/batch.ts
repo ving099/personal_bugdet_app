@@ -3,7 +3,7 @@ import type { Transaction } from '../domain/types'
 import { assignFingerprints } from './fingerprint'
 import type { ParsedTx } from './profile'
 
-export type ImportRow = ParsedTx & { categoryId?: string }
+export type ImportRow = ParsedTx & { categoryId?: string; categoryEditedByUser?: boolean }
 
 function isRealIsoDate(s: unknown): boolean {
   if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
@@ -40,6 +40,7 @@ export async function importBatch(
         amountPence: r.amountPence,
         description: r.description,
         ...(r.categoryId !== undefined ? { categoryId: r.categoryId } : {}),
+        ...(r.categoryEditedByUser ? { categoryEditedByUser: true } : {}),
         fingerprint: r.fingerprint,
         batchId,
         isTransfer: false,
