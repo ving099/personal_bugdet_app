@@ -11,6 +11,7 @@ import { panelId, tabId } from './components/tabIds'
 import TabNav, { type TabItem } from './components/Tabs'
 import LockScreen from './LockScreen'
 import { DbProvider } from './DbProvider'
+import Import from './screens/Import'
 import Settings from './screens/Settings'
 import Wizard from './screens/Wizard'
 import { useMediaQuery } from './useMediaQuery'
@@ -34,12 +35,7 @@ const SCREENS: Record<TabKey, () => ReactNode> = {
       body="Import a bank statement to see where your money goes and what you can invest this month."
     />
   ),
-  import: () => (
-    <EmptyState
-      title="No statements imported"
-      body="Download a CSV statement from your bank, then add it here. Everything stays on this device."
-    />
-  ),
+  import: () => <Import />,
   budget: () => (
     <EmptyState
       title="No budget yet"

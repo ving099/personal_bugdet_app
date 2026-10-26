@@ -17,9 +17,13 @@ function validate(t: ImportRow, row: number): void {
   if (!Number.isSafeInteger(t.amountPence)) throw new Error(`Import row ${row}: amount must be an integer number of pence`)
 }
 
+export type BatchMeta = { fileName?: string; importedAt?: string }
+
+/** Stores new rows as one atomic batch. `meta` is kept on each stored row so import history can name the batch. */
 export async function importBatch(
   db: BudgetDB,
   txs: ImportRow[],
+  meta: BatchMeta = {},
 ): Promise<{ batchId: string; added: number; skipped: number }> {
   const batchId = crypto.randomUUID()
   return db.transaction('rw', db.transactions, async () => {
@@ -40,6 +44,8 @@ export async function importBatch(
         batchId,
         isTransfer: false,
         isRefund: false,
+        ...(meta.importedAt !== undefined ? { importedAt: meta.importedAt } : {}),
+        ...(meta.fileName !== undefined ? { sourceFile: meta.fileName } : {}),
       }))
     await db.transactions.bulkAdd(fresh)
     return { batchId, added: fresh.length, skipped: rows.length - fresh.length }

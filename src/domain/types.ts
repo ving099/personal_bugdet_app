@@ -44,6 +44,9 @@ export interface Transaction {
   isTransfer: boolean
   isRefund: boolean
   incomeStreamId?: string
+  /** Import batch metadata (ISO date-time and file name); absent on rows imported before it was recorded. */
+  importedAt?: string
+  sourceFile?: string
 }
 
 export interface Category {
