@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
+import { useDeferredFocus } from '../../useFocusFirst'
 import type { Account, Category, Transaction } from '../../../domain/types'
 import { similarTransactionIds, type BudgetRow } from './budgetModel'
 import { recategorise, setFlag, setLimit } from './budgetDb'
@@ -23,13 +24,8 @@ export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, 
   const [dialogError, setDialogError] = useState('')
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
-  const focusTarget = useRef('')
-  const [focusTick, setFocusTick] = useState(0)
-
   // The changed row leaves its list, so focus goes to the category row instead of the vanished button.
-  useEffect(() => {
-    if (focusTick > 0) document.getElementById(focusTarget.current)?.focus()
-  }, [focusTick])
+  const focusLater = useDeferredFocus()
 
   async function guarded(work: () => Promise<string>) {
     setError('')
@@ -50,8 +46,7 @@ export default function SpendingSection({ db, rows, monthTxs, allTxs, accounts, 
       setNotice(othersChanged > 0 ? `Updated ${plural(othersChanged, 'similar transaction')}.` : 'Category changed.')
       setError('')
       setEditing(null)
-      focusTarget.current = openId ? `cat-${openId}` : 'spending-heading'
-      setFocusTick((n) => n + 1)
+      focusLater(openId ? `cat-${openId}` : 'spending-heading')
     } catch {
       setDialogError("Couldn't save that. Nothing was changed.")
     } finally {

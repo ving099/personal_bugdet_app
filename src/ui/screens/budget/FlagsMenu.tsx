@@ -10,7 +10,7 @@ export function useFlagsMenu(tx: Transaction, onFlag: (tx: Transaction, flag: Fl
   const panelId = useId()
   const button = (
     <Button variant="secondary" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>
-      Flags<span className="sr-only">{` for ${tx.description}`}</span>
+      Flags{' '}<span className="sr-only">{`for ${tx.description}`}</span>
     </Button>
   )
   const panel = open ? (

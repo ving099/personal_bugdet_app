@@ -68,7 +68,7 @@ export default function CreditRow({ tx, streams, busy, open, onToggle, onSave, o
       </p>
       <div className="txn-actions">
         <Button variant="secondary" id={`assign-${tx.id}`} aria-expanded={open} onClick={onToggle}>
-          Assign<span className="sr-only">{` ${tx.description} to a stream`}</span>
+          Assign{' '}<span className="sr-only">{`${tx.description} to a stream`}</span>
         </Button>
         {flags.button}
       </div>

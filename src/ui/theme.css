@@ -1362,3 +1362,157 @@ input {
   overflow-wrap: anywhere;
   color: var(--ink-muted);
 }
+
+/* Debts and savings */
+
+.debts {
+  max-width: 760px;
+}
+
+.item-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.debt {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.debt:first-child {
+  padding-top: 0;
+}
+
+.item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.item-name,
+.item-amount {
+  margin: 0;
+  font-weight: 700;
+}
+
+.item-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.item-name .chip {
+  margin-left: 4px;
+  vertical-align: 1px;
+}
+
+.item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 4px 0 6px;
+  color: var(--ink-muted);
+}
+
+.item-strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.item-form {
+  max-width: 420px;
+  margin: 12px 0 8px;
+  padding: 4px 0 0 14px;
+  border-left: 3px solid var(--line);
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 12px 0 16px;
+}
+
+.totals div {
+  display: flex;
+  flex-direction: column;
+}
+
+.totals dt {
+  color: var(--ink-muted);
+  font-size: var(--fs-s);
+  font-weight: 700;
+}
+
+.totals dd {
+  margin: 0;
+  font-size: var(--fs-l);
+  font-weight: 700;
+}
+
+.payoff {
+  margin-top: 24px;
+}
+
+.payoff-input {
+  max-width: 320px;
+}
+
+.debtfree-line {
+  margin: 0 0 6px;
+  font-family: var(--font-head);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.chart {
+  margin: 16px 0 0;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: 110px;
+}
+
+.chart-base {
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--ink-muted);
+  font-size: var(--fs-s);
+}
+
+.milestones {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.milestones li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}

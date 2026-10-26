@@ -12,6 +12,7 @@ import TabNav, { type TabItem } from './components/Tabs'
 import LockScreen from './LockScreen'
 import { DbProvider } from './DbProvider'
 import Budget from './screens/Budget'
+import DebtsSavings from './screens/DebtsSavings'
 import Import from './screens/Import'
 import Settings from './screens/Settings'
 import Wizard from './screens/Wizard'
@@ -38,12 +39,7 @@ const SCREENS: Record<TabKey, () => ReactNode> = {
   ),
   import: () => <Import />,
   budget: () => <Budget />,
-  debts: () => (
-    <EmptyState
-      title="No debts or savings added"
-      body="Add your debts and savings pots to see a payoff plan and how much cushion you have."
-    />
-  ),
+  debts: () => <DebtsSavings />,
   invest: () => (
     <EmptyState
       title="Nothing to invest yet"

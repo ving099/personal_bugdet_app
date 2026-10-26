@@ -27,7 +27,7 @@ export default function TransactionRow({ tx, onChangeCategory, onFlag }: Props) 
       </p>
       <div className="txn-actions">
         <Button variant="secondary" onClick={() => onChangeCategory(tx)}>
-          Change category<span className="sr-only">{` for ${tx.description}`}</span>
+          Change category{' '}<span className="sr-only">{`for ${tx.description}`}</span>
         </Button>
         {flags.button}
       </div>
