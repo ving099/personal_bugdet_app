@@ -1,0 +1,204 @@
+import { sinkingMonthlyPence, smoothedIncome, trailingSpend } from '../../../budget/summary'
+import { highAprDebts } from '../../../debt/debt'
+import { budgetMonthOf, taxYearOf } from '../../../domain/dates'
+import type {
+  Account, AllowanceUsed, Bucket, Category, Debt, Holding, ISODate, IncomeStream, InvestmentLog, OpeningHolding,
+  Pence, Platform, SavingsPot, Settings, SinkingFund, Transaction, Wrapper,
+} from '../../../domain/types'
+import { driftReport, type DriftReport } from '../../../invest/drift'
+import { computeInvestable, type InvestableInput, type InvestableResult } from '../../../invest/investable'
+import { buildMonthlyPlan, type MonthlyPlan } from '../../../invest/plan'
+import { allocateWrappers, type WrapperAllocation } from '../../../invest/wrappers'
+
+/** Everything the investing engines read, straight from the database. */
+export interface InvestData {
+  settings: Settings
+  accounts: Account[]
+  categories: Category[]
+  streams: IncomeStream[]
+  txs: Transaction[]
+  debts: Debt[]
+  pots: SavingsPot[]
+  funds: SinkingFund[]
+  used: AllowanceUsed[]
+  holdings: Holding[]
+  platforms: Platform[]
+  opening: OpeningHolding[]
+  log: InvestmentLog[]
+}
+
+const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
+
+/**
+ * The monthly figures computeInvestable needs, for the budget month containing `today`.
+ * Spending and income come from the three budget months before it; `categories` is always passed so
+ * excluded categories are ignored exactly as on the Budget tab.
+ */
+export function investableInputFor(data: InvestData, today: ISODate): { input: InvestableInput; month: string } {
+  const { settings, accounts, categories, streams, txs } = data
+  const startDay = settings.budgetMonthStartDay
+  const month = budgetMonthOf(today, startDay)
+  const spend = trailingSpend({ asOfMonth: month, startDay, txs, accounts, categories })
+  const income = smoothedIncome({ asOfMonth: month, startDay, txs, accounts, streams, categories })
+  const high = highAprDebts(data.debts, settings.aprThresholdPercent, today)
+  const pot = settings.emergencyFundPotId ? data.pots.find((p) => p.id === settings.emergencyFundPotId) : undefined
+  return {
+    month,
+    input: {
+      incomePence: income.totalPence,
+      spendPence: spend.averagePence,
+      sinkingPence: sinkingMonthlyPence(data.funds),
+      debtMinimumsPence: sum(data.debts.map((d) => d.minimumPaymentPence)),
+      highAprPayoffCapacityPence: sum(high.map((d) => d.balancePence)),
+      emergencyGapPence: pot ? Math.max(0, pot.targetPence - pot.balancePence) : 0,
+      bufferPercent: settings.bufferPercent,
+      emergencyTopUpSharePercent: settings.emergencyTopUpSharePercent,
+      monthsOfHistory: Math.max(spend.monthsUsed, income.monthsUsed),
+    },
+  }
+}
+
+/**
+ * Allowance used as it stood before this month's ticked lines, so ticking a line off does not reshuffle the
+ * plan it came from. Only rows for `taxYear` are adjusted; never below zero.
+ */
+export function planForUsed(used: AllowanceUsed[], log: InvestmentLog[], month: string, taxYear: string): AllowanceUsed[] {
+  const thisMonth = log.filter((l) => l.month === month)
+  return used.map((u) => {
+    if (u.taxYear !== taxYear) return u
+    const logged = sum(thisMonth.filter((l) => l.wrapper === u.wrapper).map((l) => l.actualPence))
+    return { ...u, usedPence: Math.max(0, u.usedPence - logged) }
+  })
+}
+
+export interface InvestView {
+  month: string
+  taxYear: string
+  input: InvestableInput
+  investable: InvestableResult
+  wrappers: WrapperAllocation[]
+  plan: MonthlyPlan
+  /** Portfolio now: opening holdings plus every logged purchase. */
+  drift: DriftReport
+  /** This month's ticked lines. */
+  monthLog: InvestmentLog[]
+}
+
+export function buildInvestView(data: InvestData, today: ISODate): InvestView {
+  const { settings } = data
+  const { input, month } = investableInputFor(data, today)
+  const taxYear = taxYearOf(today)
+  const investable = computeInvestable(input)
+  const monthLog = data.log.filter((l) => l.month === month)
+  const wrappers = allocateWrappers({
+    investablePence: investable.ok ? investable.investablePence : 0,
+    today,
+    settings,
+    used: planForUsed(data.used, data.log, month, taxYear),
+    lisaEnabled: settings.lisaEnabled,
+  })
+  const base = { opening: data.opening, holdings: data.holdings, bucketSplit: settings.bucketSplit }
+  // The split for this month is set from the portfolio before this month's purchases, so it stays put while ticking.
+  const startOfMonth = driftReport({ ...base, log: data.log.filter((l) => l.month < month) })
+  const plan = buildMonthlyPlan({
+    investable, wrappers, holdings: data.holdings, platforms: data.platforms,
+    defaultPlatformByWrapper: settings.defaultPlatformByWrapper, settings, drift: startOfMonth,
+  })
+  return { month, taxYear, input, investable, wrappers, plan, drift: driftReport({ ...base, log: data.log }), monthLog }
+}
+
+export const WRAPPER_NAMES: Record<Wrapper, string> = {
+  pension: 'Pension (SIPP)', isa: 'Stocks and shares ISA', lisa: 'Lifetime ISA', gia: 'General investment account',
+}
+export const SHORT_WRAPPER: Record<Wrapper, string> = { pension: 'pension', isa: 'ISA', lisa: 'LISA', gia: 'GIA' }
+/** Wrappers with a yearly allowance; logging into them raises AllowanceUsed. */
+export const ALLOWANCE_WRAPPERS: readonly Wrapper[] = ['pension', 'isa', 'lisa']
+
+const PLAIN: Record<string, string> = {
+  'Spending (3-month average)': 'Spending (3-month average)',
+  'Sinking funds': 'Set aside for yearly bills',
+  'Debt minimums': 'Minimum debt payments',
+  'Safety buffer': 'Safety buffer',
+  'Emergency fund top-up': 'Emergency fund top-up',
+  'Extra debt payment': 'Extra payment on high-interest debt',
+}
+export const plainLabel = (engineLabel: string) => PLAIN[engineLabel] ?? engineLabel
+
+/** The plain-English label for one of computeInvestable's lines, as the breakdown shows it. */
+export const displayLabel = (engineLabel: string, input: Pick<InvestableInput, 'bufferPercent'>) =>
+  engineLabel === 'Safety buffer' ? `Safety buffer (${input.bufferPercent}% of income)` : plainLabel(engineLabel)
+
+export interface BreakdownLine {
+  label: string
+  /** Signed: income positive, deductions negative. */
+  pence: Pence
+  total?: boolean
+}
+
+/** "How we got this number": income, each deduction from computeInvestable, then what is left to invest. */
+export function breakdownLines(view: Pick<InvestView, 'input' | 'investable'>): BreakdownLine[] {
+  const { input, investable } = view
+  const lines: BreakdownLine[] = [
+    { label: 'Income (expected, or your 3-month average if lower)', pence: input.incomePence },
+    ...investable.lines.map((l) => ({ label: displayLabel(l.label, input), pence: -l.pence })),
+  ]
+  if (investable.ok) lines.push({ label: 'Invest this month', pence: investable.investablePence, total: true })
+  return lines
+}
+
+export function reasonText(result: InvestableResult): { short: string; long: string } {
+  if (result.ok) return { short: '', long: '' }
+  if (result.reason === 'no-income') {
+    return {
+      short: 'Add your income first',
+      long: 'There is no income to work from yet. Add an income stream with its expected monthly pay, or import a statement with your pay in it.',
+    }
+  }
+  return {
+    short: 'Nothing spare this month',
+    long: 'Nothing is left to invest this month: your spending, bills, debt payments and safety buffer use up all of your income.',
+  }
+}
+
+export const logId = (month: string, wrapper: Wrapper, holdingId: string) => `${month}:${wrapper}:${holdingId}`
+
+export interface PlanRow {
+  id: string
+  wrapper: Wrapper
+  holdingId: string
+  bucket: Bucket
+  name: string
+  ticker: string
+  plannedPence: Pence
+}
+
+export interface PlanGroup {
+  wrapper: Wrapper
+  pence: Pence
+  platformId: string
+  note?: string
+  rows: PlanRow[]
+  /** Money in a bucket with no fund set up (shown, but cannot be ticked). */
+  unallocated: { bucket: Bucket; pence: Pence }[]
+}
+
+/** The plan card, one group per wrapper, one row per fund with money in it. Rows sum to the wrapper amount. */
+export function planGroups(plan: MonthlyPlan, holdings: Holding[], month: string): PlanGroup[] {
+  return plan.lines.map((line) => {
+    const rows: PlanRow[] = []
+    const unallocated: PlanGroup['unallocated'] = []
+    for (const part of line.holdings) {
+      if (part.pence <= 0) continue
+      const h = holdings.find((x) => x.id === part.holdingId)
+      if (!h) {
+        unallocated.push({ bucket: part.bucket, pence: part.pence })
+        continue
+      }
+      rows.push({
+        id: logId(month, line.wrapper, h.id), wrapper: line.wrapper, holdingId: h.id, bucket: part.bucket,
+        name: h.exampleName, ticker: h.ticker, plannedPence: part.pence,
+      })
+    }
+    return { wrapper: line.wrapper, pence: line.pence, platformId: line.platformId, ...(line.note ? { note: line.note } : {}), rows, unallocated }
+  })
+}

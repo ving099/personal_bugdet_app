@@ -13,9 +13,13 @@ import LockScreen from './LockScreen'
 import { DbProvider } from './DbProvider'
 import Budget from './screens/Budget'
 import DebtsSavings from './screens/DebtsSavings'
+import Home from './screens/Home'
 import Import from './screens/Import'
+import Invest from './screens/Invest'
+import { useInvestPlan } from './screens/invest/investDb'
 import Settings from './screens/Settings'
 import Wizard from './screens/Wizard'
+import { todayISO } from './formValues'
 import { useMediaQuery } from './useMediaQuery'
 
 type TabKey = 'home' | 'import' | 'budget' | 'debts' | 'invest' | 'settings'
@@ -29,23 +33,21 @@ const TABS: readonly TabItem<TabKey>[] = [
   { id: 'settings', label: 'Settings', icon: <SettingsIcon /> },
 ]
 
-/** Placeholder screens; tasks 15-19 replace these one by one. */
-const SCREENS: Record<TabKey, () => ReactNode> = {
-  home: () => (
-    <EmptyState
-      title="Nothing to show yet"
-      body="Import a bank statement to see where your money goes and what you can invest this month."
-    />
-  ),
+/** Debts with "Extra per month" starting from the live plan, so Home, Invest and Debts agree. */
+function DebtsTab() {
+  const today = todayISO()
+  const live = useInvestPlan(today)
+  if (!live) return <Loading />
+  const { investable } = live.view
+  return <DebtsSavings today={today} extraDebtPence={investable.ok ? investable.extraDebtPence : 0} />
+}
+
+const SCREENS: Record<TabKey, (go: (tab: TabKey) => void) => ReactNode> = {
+  home: (go) => <Home onNavigate={go} />,
   import: () => <Import />,
   budget: () => <Budget />,
-  debts: () => <DebtsSavings />,
-  invest: () => (
-    <EmptyState
-      title="Nothing to invest yet"
-      body="After you import a month of income and spending, this page shows what is safe to invest."
-    />
-  ),
+  debts: () => <DebtsTab />,
+  invest: () => <Invest />,
   settings: () => <Settings />,
 }
 
@@ -82,10 +84,22 @@ function Shell() {
   const wide = useMediaQuery('(min-width: 900px)')
   const current = TABS.find((t) => t.id === tab) ?? TABS[0]
 
+  const [moves, setMoves] = useState(0)
+
   function choose(next: TabKey) {
     setTab(next)
     rememberTab(next)
   }
+
+  /** In-page links (for example Home's "See the plan") switch tab and move focus to the new page. */
+  function go(next: TabKey) {
+    choose(next)
+    setMoves((n) => n + 1)
+  }
+
+  useEffect(() => {
+    if (moves > 0) document.getElementById('main')?.focus()
+  }, [moves])
 
   return (
     <div className="app">
@@ -96,7 +110,7 @@ function Shell() {
       <main className="main" id="main" tabIndex={-1}>
         <div className="content" role="tabpanel" id={panelId(tab)} aria-labelledby={tabId(tab)}>
           <h1 className="page-title">{current.label}</h1>
-          {SCREENS[tab]()}
+          {SCREENS[tab](go)}
         </div>
       </main>
     </div>

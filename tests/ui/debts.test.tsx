@@ -252,6 +252,25 @@ describe('Debts: payoff timeline', () => {
     expect(await screen.findByText('Debt-free by December 2026')).toBeInTheDocument()
   })
 
+  it('follows a changed extraDebtPence until the field is edited', async () => {
+    const db = await freshDb()
+    await db.debts.bulkPut(two)
+    const user = userEvent.setup()
+    const view = (extra: Pence) => (
+      <DbProvider db={db}>
+        <DebtsSavings today={TODAY} extraDebtPence={extra} />
+      </DbProvider>
+    )
+    const { rerender } = render(view(10000))
+    expect(await screen.findByLabelText('Extra per month')).toHaveValue('100.00')
+    rerender(view(20000))
+    expect(await screen.findByLabelText('Extra per month')).toHaveValue('200.00')
+    await user.clear(screen.getByLabelText('Extra per month'))
+    await user.type(screen.getByLabelText('Extra per month'), '50')
+    rerender(view(30000))
+    expect(screen.getByLabelText('Extra per month')).toHaveValue('50')
+  })
+
   it('treats a negative or unreadable extra as nothing and says why', async () => {
     const db = await freshDb()
     const user = await setup(db, { debts: two })

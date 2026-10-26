@@ -38,6 +38,12 @@ interface Props {
 export default function PayoffTimeline({ debts, today, extraDebtPence }: Props) {
   const [announce, setAnnounce] = useState('')
   const [extra, setExtra] = useState(() => penceToInput(extraDebtPence ?? 0))
+  // The plan's figure can change while this tab is open; follow it unless the field has been edited.
+  const [suggested, setSuggested] = useState(extraDebtPence ?? 0)
+  if ((extraDebtPence ?? 0) !== suggested) {
+    setSuggested(extraDebtPence ?? 0)
+    if (extra === penceToInput(suggested)) setExtra(penceToInput(extraDebtPence ?? 0))
+  }
   const parsed = extra.trim() === '' ? ({ ok: true, pence: 0 } as const) : parseMoney(extra)
   const negative = parsed.ok && parsed.pence < 0
   const overpay = parsed.ok && parsed.pence >= 0 ? parsed.pence : 0

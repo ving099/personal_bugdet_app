@@ -1516,3 +1516,268 @@ input {
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
 }
+
+/* Home and Invest. Marigold (--signal) marks investing only. */
+
+.home,
+.invest {
+  max-width: 760px;
+}
+
+.invest-hero {
+  margin-bottom: 32px;
+  padding-left: 26px;
+  box-shadow: inset 6px 0 0 var(--signal), var(--shadow);
+}
+
+.invest-hero-heading {
+  margin: 0 0 4px;
+  font-size: var(--fs-l);
+  font-weight: 700;
+}
+
+.invest-figure {
+  margin: 0 0 8px;
+}
+
+.invest-hero .btn {
+  margin-top: 8px;
+}
+
+.invest-none {
+  margin: 0 0 8px;
+  font-family: var(--font-head);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.invest-reason {
+  max-width: 60ch;
+  margin: 0 0 8px;
+}
+
+.invest-drain {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.note-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--ink-muted);
+}
+
+.note-list li + li {
+  margin-top: 4px;
+}
+
+.invest-section,
+.home-section {
+  margin-bottom: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.invest-heading {
+  margin: 0 0 12px;
+  font-family: var(--font-head);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.invest-intro {
+  max-width: 60ch;
+  margin: 0 0 12px;
+  color: var(--ink-muted);
+}
+
+.breakdown,
+.plan-list,
+.attention-list,
+.warning-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breakdown-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.breakdown-label {
+  min-width: 0;
+}
+
+.breakdown-line .money {
+  flex: none;
+  font-weight: 700;
+}
+
+.breakdown-total {
+  border-bottom: 0;
+  border-top: 2px solid var(--ink);
+  font-weight: 700;
+}
+
+.breakdown-total .money {
+  padding: 0 0 2px;
+  box-shadow: inset 0 -4px 0 var(--signal);
+  font-size: var(--fs-l);
+}
+
+.warning-list {
+  margin-top: 16px;
+}
+
+.warning-list .warning-text {
+  margin-bottom: 8px;
+}
+
+.plan-group {
+  margin-top: 24px;
+}
+
+.plan-group-heading,
+.plan-bucket-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin: 0 0 4px;
+}
+
+.plan-group-heading {
+  font-size: var(--fs-l);
+  font-weight: 700;
+}
+
+.plan-bucket-heading {
+  margin-top: 12px;
+  padding-bottom: 4px;
+  color: var(--ink-muted);
+  font-size: var(--fs-m);
+  font-weight: 700;
+}
+
+.plan-platform {
+  margin: 4px 0 8px;
+}
+
+.plan-platform-pick {
+  max-width: 360px;
+  margin-top: 8px;
+}
+
+.plan-row {
+  border-top: 1px solid var(--line);
+}
+
+.plan-line {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 4px;
+}
+
+.plan-line .check-box {
+  grid-row: 1 / span 2;
+  align-self: start;
+}
+
+.plan-fund {
+  padding-top: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.plan-amount {
+  padding-top: 12px;
+  align-self: start;
+  font-weight: 700;
+  text-align: right;
+}
+
+.plan-ticker {
+  grid-column: 2 / -1;
+  padding-bottom: 10px;
+  color: var(--ink-muted);
+  font-size: var(--fs-s);
+}
+
+.plan-actual {
+  max-width: 240px;
+  margin: 0 0 12px 52px;
+}
+
+.plan-row .form-error {
+  margin: 0 0 12px 52px;
+}
+
+.drift-note {
+  max-width: 60ch;
+  margin: 12px 0 0;
+}
+
+.disclaimer {
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: var(--fs-s);
+}
+
+.home-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0 0;
+}
+
+.home-figures dt {
+  color: var(--ink-muted);
+  font-size: var(--fs-s);
+  font-weight: 700;
+}
+
+.home-figures dd {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+}
+
+@media (min-width: 640px) {
+  .home-figures {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.caught-up {
+  margin: 0;
+  font-weight: 700;
+}
+
+.attention-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.attention-text {
+  flex: 1 1 240px;
+  margin: 0;
+  max-width: 60ch;
+}
