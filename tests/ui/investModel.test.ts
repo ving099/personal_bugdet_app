@@ -287,3 +287,27 @@ describe('breakdownLines', () => {
     expect(last).toEqual({ label: 'Shortfall this month', pence: 100000 - 150000 - 10000, total: true })
   })
 })
+
+describe('buildInvestView never throws on figures the engines reject', () => {
+  const bad = [
+    ['a negative debt minimum', data({ debts: [debt({ minimumPaymentPence: -500 })] })],
+    ['an out-of-range pension share', data({ settings: { ...seedSettings, onboardingDone: true, wrapperShares: { pension: 150 } } })],
+    ['a safety buffer above 100%', data({ settings: { ...seedSettings, onboardingDone: true, bufferPercent: 250 } })],
+  ] as const
+  for (const [what, d] of bad) {
+    it(`returns an explicit no-figure view for ${what}`, () => {
+      const view = buildInvestView(d, TODAY)
+      expect(view.investable.ok).toBe(false)
+      expect(!view.investable.ok && view.investable.reason).toBe('invalid-data')
+      expect(investState(view.investable)).toBe('none')
+      expect(view.groups).toEqual([])
+      expect(view.plan.ok).toBe(false)
+      expect(view.plan.lines).toEqual([])
+      expect(view.month).toBe('2026-10')
+      expect(reasonText(view.investable).long).toBe(
+        "We couldn't work out a figure from your data. Check your latest transactions and debts.",
+      )
+      expect(() => breakdownLines(view)).not.toThrow()
+    })
+  }
+})

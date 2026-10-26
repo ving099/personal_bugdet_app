@@ -16,7 +16,7 @@ export interface PlanLine {
 
 export interface MonthlyPlan {
   ok: boolean
-  reason?: 'no-income' | 'no-surplus'
+  reason?: Extract<InvestableResult, { ok: false }>['reason']
   totalPence: Pence
   lines: PlanLine[]
   /**

@@ -4,6 +4,7 @@ import { breakdownLines, type InvestView } from './investModel'
 /** "How we got this number": income, then each deduction from computeInvestable, then the result. */
 export default function Breakdown({ view }: { view: InvestView }) {
   const lines = breakdownLines(view)
+  if (lines.length === 0) return null
   return (
     <section className="invest-section" aria-labelledby="breakdown-heading">
       <h2 className="invest-heading" id="breakdown-heading">How we got this number</h2>

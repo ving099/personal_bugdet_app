@@ -42,6 +42,7 @@ const DEBT_KIND_LABEL: Record<string, string> = { card: 'Credit card', loan: 'Lo
 const PLAN_REASON: Record<string, string> = {
   'no-income': 'There is no income to work from yet. Add an income stream with its expected monthly pay, or import a statement with your pay in it.',
   'no-surplus': 'Nothing is left to invest this month: your spending, bills, debt payments and safety buffer use up all of your income.',
+  'invalid-data': "We couldn't work out a figure from your data. Check your latest transactions and debts.",
 }
 /** Percent values are written to one decimal place of percent (22.94 -> 22.9%). */
 const roundPct = (fraction: number) => Math.round(fraction * 1000) / 1000

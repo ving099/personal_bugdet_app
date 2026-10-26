@@ -106,7 +106,67 @@ export function withTaxYears(log: InvestmentLog[], startDay: number): Investment
   return log.map((l) => (l.taxYear ? l : { ...l, taxYear: taxYearOfBudgetMonth(l.month, startDay) }))
 }
 
+/** The plain-English reason shown when the engines reject the figures (see buildInvestView). */
+export const INVALID_DATA_TEXT = "We couldn't work out a figure from your data. Check your latest transactions and debts."
+
+const EMPTY_INPUT: InvestableInput = {
+  incomePence: 0, spendPence: 0, sinkingPence: 0, debtMinimumsPence: 0, highAprPayoffCapacityPence: 0,
+  emergencyGapPence: 0, bufferPercent: 0, emergencyTopUpSharePercent: 0, monthsOfHistory: 0,
+}
+
+/**
+ * The live plan for the budget month containing `today`. Never throws: the engines throw (RangeError and similar)
+ * when a stored figure is out of range, and this runs during render on Home, Invest and Debts, so a throw would
+ * blank the app. Instead it returns a view whose investable is `{ ok: false, reason: 'invalid-data' }`, which the
+ * screens show like any other "no figure" reason.
+ */
 export function buildInvestView(data: InvestData, today: ISODate): InvestView {
+  try {
+    return computeInvestView(data, today)
+  } catch {
+    return invalidDataView(data, today)
+  }
+}
+
+function invalidDataView(data: InvestData, today: ISODate): InvestView {
+  const startDay = data.settings.budgetMonthStartDay
+  let month = today.slice(0, 7)
+  try {
+    month = budgetMonthOf(today, startDay)
+  } catch {
+    /* keep the calendar month */
+  }
+  let input = EMPTY_INPUT
+  try {
+    input = investableInputFor(data, today).input
+  } catch {
+    /* the figures themselves could not be read; show none */
+  }
+  const investable: InvestableResult = { ok: false, reason: 'invalid-data', lines: [], biggestDrainLabel: '' }
+  const noDrift: DriftReport = { growthPct: 0, aggressivePct: 0, underweight: null, biasNote: '' }
+  let drift = noDrift
+  let planDrift = noDrift
+  try {
+    const log = withTaxYears(data.log, startDay)
+    const base = { opening: data.opening, holdings: data.holdings, bucketSplit: data.settings.bucketSplit }
+    drift = driftReport({ ...base, log })
+    planDrift = driftReport({ ...base, log: log.filter((l) => l.month < month) })
+  } catch {
+    /* leave the portfolio view empty */
+  }
+  const plan: MonthlyPlan = {
+    ok: false, reason: 'invalid-data', totalPence: 0, lines: [], holdings: [], effectiveSplit: { growth: 0, aggressive: 0 },
+    extraDebtPence: 0, emergencyTopUpPence: 0, investableLines: [], biggestDrainLabel: '', notes: [], warnings: [],
+  }
+  const taxYear = taxYearOf(today)
+  // Every logged line for this month stays listed, so it can still be corrected or undone.
+  const otherLogged = data.log.filter((l) => l.month === month)
+  return {
+    month, taxYear, input, investable, wrappers: [], plan, groups: [], logged: new Map(), otherLogged, drift, planDrift,
+  }
+}
+
+function computeInvestView(data: InvestData, today: ISODate): InvestView {
   const { settings } = data
   const { input, month } = investableInputFor(data, today)
   const taxYear = taxYearOf(today)
@@ -172,6 +232,8 @@ export interface BreakdownLine {
 /** "How we got this number": income, each deduction from computeInvestable, then what is left to invest. */
 export function breakdownLines(view: Pick<InvestView, 'input' | 'investable'>): BreakdownLine[] {
   const { input, investable } = view
+  // No trustworthy figures to break down.
+  if (!investable.ok && investable.reason === 'invalid-data') return []
   const lines: BreakdownLine[] = [
     { label: 'Income (expected, or your 3-month average if lower)', pence: input.incomePence },
     ...investable.lines.map((l) => ({ label: displayLabel(l.label, input), pence: -l.pence })),
@@ -183,6 +245,7 @@ export function breakdownLines(view: Pick<InvestView, 'input' | 'investable'>): 
 
 export function reasonText(result: InvestableResult): { short: string; long: string } {
   if (result.ok) return { short: '', long: '' }
+  if (result.reason === 'invalid-data') return { short: "Couldn't work out a figure", long: INVALID_DATA_TEXT }
   if (result.reason === 'no-income') {
     return {
       short: 'Add your income first',

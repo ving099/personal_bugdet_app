@@ -29,7 +29,11 @@ export type InvestableResult =
     }
   | {
       ok: false
-      reason: 'no-income' | 'no-surplus'
+      /**
+       * 'invalid-data' is never returned by computeInvestable (it throws RangeError on bad input instead);
+       * the UI uses it when the figures could not be worked out, so the screens can say so in plain words.
+       */
+      reason: 'no-income' | 'no-surplus' | 'invalid-data'
       lines: InvestableLine[]
       biggestDrainLabel: string
     }

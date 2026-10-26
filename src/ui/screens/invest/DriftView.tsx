@@ -25,7 +25,7 @@ export default function DriftView({ view, bucketSplit }: { view: InvestView; buc
       )}
       {hasHoldings && drift.biasNote !== planDrift.biasNote && <p className="drift-note">{`Now: ${drift.biasNote}`}</p>}
       {/* The split below is set from the portfolio before this month's purchases, so say which note drives it. */}
-      <p className="drift-note">{`Before this month's purchases: ${planDrift.biasNote}`}</p>
+      {planDrift.biasNote && <p className="drift-note">{`Before this month's purchases: ${planDrift.biasNote}`}</p>}
       {invest && (
         <p className="drift-note">{`So this month's new money: ${show(split.growth)}% growth, ${show(split.aggressive)}% aggressive.`}</p>
       )}
