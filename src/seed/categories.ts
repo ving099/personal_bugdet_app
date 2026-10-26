@@ -1,4 +1,4 @@
-import type { Category } from '../domain/types'
+import type { Category, Rule } from '../domain/types'
 
 const NAMES = [
   'Groceries and food', 'Eating out', 'Direct debits and bills', 'Housing', 'Transport',
@@ -15,3 +15,29 @@ export const seedCategories: Category[] = NAMES.map((name) => ({
   monthlyLimitPence: 0,
   excludedFromSpending: name === 'Transfers',
 }))
+
+const RULE_SOURCES: Record<string, string[]> = {
+  'groceries-and-food': ['tesco', 'sainsbury', 'asda', 'morrisons', 'aldi', 'lidl', 'waitrose', 'co-op', 'ocado', 'iceland', 'marks & spencer food', 'one stop'],
+  'eating-out': ['mcdonald', 'greggs', 'pret a manger', 'nando', 'kfc', 'burger king', 'subway', 'domino', 'pizza hut', 'just eat', 'deliveroo', 'uber eats', 'coffee', 'cafe', 'restaurant'],
+  'direct-debits-and-bills': ['council tax', 'british gas', 'octopus energy', 'thames water', 'anglian water', 'tv licence', 'virgin media', 'bt group', 'sky digital', 'vodafone', 'insurance'],
+  housing: ['mortgage', 'letting'],
+  transport: ['tfl', 'trainline', 'national rail', 'c2c', 'greater anglia', 'uber', 'shell fuel', 'esso', 'texaco', 'parking', 'dvla'],
+  clothes: ['primark', 'next retail', 'h&m', 'zara', 'tk maxx', 'uniqlo'],
+  subscriptions: ['netflix', 'spotify', 'disney plus', 'amazon prime', 'apple.com/bill', 'youtube premium', 'now tv'],
+  health: ['boots', 'superdrug', 'pharmacy', 'dentist', 'optician', 'specsavers'],
+  entertainment: ['cinema', 'odeon', 'steam', 'playstation', 'xbox', 'ticketmaster'],
+  'family-and-kids': ['mothercare', 'nursery'],
+  gifts: ['funky pigeon', 'moonpig', 'hallmark'],
+  travel: ['ryanair', 'easyjet', 'british airways', 'booking.com', 'airbnb', 'trip.com'],
+  cash: ['atm', 'cash withdrawal'],
+  'fees-and-interest': ['overdraft fee', 'interest charged', 'monthly fee', 'account fee'],
+  'debt-payments': ['loan repayment', 'klarna', 'clearpay'],
+  'savings-and-investing': ['vanguard', 'trading 212', 'freetrade', 'hargreaves lansdown', 'nutmeg', 'moneybox'],
+  income: ['salary', 'wages', 'paystream', 'hmrc refund', 'child benefit'],
+  transfers: ['transfer to', 'transfer from', 'standing order to savings'],
+}
+
+/** Default keyword rules for common UK merchants and bill words (lower-case matchText). */
+export const defaultRules: Rule[] = Object.entries(RULE_SOURCES).flatMap(([categoryId, words]) =>
+  words.map((matchText): Rule => ({ id: `default:${matchText}`, matchText, categoryId, source: 'default' })),
+)
