@@ -66,8 +66,11 @@ export function monthSummary(input: {
 }
 
 /**
- * Mean spend over the previous up-to-`months` budget months (as-of month excluded) that have spending data;
- * a month counts as "having data" if it has any spend/refund row.
+ * Mean spend over the previous up-to-`months` budget months (as-of month excluded) that have spending data.
+ * A month "has data" only when its NET spend (outflows minus refunds) is above zero. A month where refunds
+ * match or outweigh spending (for example a big return of something bought the month before) is treated as
+ * no data: it is left out of both the average and `monthsUsed`, so it can neither drag the average down nor
+ * make it negative. The result is therefore always >= 0.
  * Callers (e.g. the Invest composition) must pass `categories` so excludedFromSpending categories
  * are ignored exactly as in monthSummary; when omitted, no category is excluded.
  */
@@ -87,8 +90,9 @@ export function trailingSpend(input: {
     const flows = txsInMonth(input.txs, month, input.startDay)
       .map((t) => classify(t, input.accounts, excluded))
       .filter((f) => f?.kind === 'spend')
-    if (flows.length === 0) continue
-    totals.push(sum(flows.map((f) => f!.pence)))
+    const net = sum(flows.map((f) => f!.pence))
+    if (net <= 0) continue
+    totals.push(net)
   }
   if (totals.length === 0) return { averagePence: 0, monthsUsed: 0 }
   return { averagePence: Math.round(sum(totals) / totals.length), monthsUsed: totals.length }

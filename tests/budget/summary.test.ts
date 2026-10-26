@@ -228,3 +228,46 @@ describe('review fixes', () => {
     expect(JSON.stringify({ txs, accounts, exCats, streams })).toBe(snap)
   })
 })
+
+describe('trailingSpend with net-refund months', () => {
+  it('never returns a negative average when refunds outweigh spend in a month', () => {
+    const r = trailingSpend({
+      ...base,
+      asOfMonth: '2026-10',
+      txs: [tx('2026-09-01', -2000), tx('2026-09-20', 20000, { isRefund: true })],
+    })
+    expect(r).toEqual({ averagePence: 0, monthsUsed: 0 })
+  })
+
+  it('treats a net-refund month as no data, so it neither lowers the average nor counts as a month used', () => {
+    const r = trailingSpend({
+      ...base,
+      asOfMonth: '2026-10',
+      txs: [
+        tx('2026-07-05', -30000),
+        tx('2026-08-05', -10000),
+        tx('2026-09-01', -2000),
+        tx('2026-09-20', 20000, { isRefund: true }),
+      ],
+    })
+    expect(r).toEqual({ averagePence: 20000, monthsUsed: 2 })
+  })
+
+  it('treats a month that nets to exactly zero as no data', () => {
+    const r = trailingSpend({
+      ...base,
+      asOfMonth: '2026-10',
+      txs: [tx('2026-08-05', -10000), tx('2026-09-01', -2000), tx('2026-09-03', 2000, { isRefund: true })],
+    })
+    expect(r).toEqual({ averagePence: 10000, monthsUsed: 1 })
+  })
+
+  it('still nets a smaller refund against the month it lands in', () => {
+    const r = trailingSpend({
+      ...base,
+      asOfMonth: '2026-10',
+      txs: [tx('2026-09-01', -5000), tx('2026-09-03', 2000, { isRefund: true })],
+    })
+    expect(r).toEqual({ averagePence: 3000, monthsUsed: 1 })
+  })
+})
