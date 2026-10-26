@@ -18,8 +18,9 @@ export async function recategorise(
   return db.transaction('rw', db.transactions, db.rules, async () => {
     const tx = await db.transactions.get(txId)
     if (!tx) throw new Error('That transaction no longer exists.')
+    // Marked as the owner's choice: a credit filed under Transfers by hand then stays out of income.
     if (!applyToSimilar) {
-      await db.transactions.update(txId, { categoryId })
+      await db.transactions.update(txId, { categoryId, categoryEditedByUser: true })
       return { othersChanged: 0 }
     }
     const rule = learnRule(tx.description, categoryId)
@@ -28,9 +29,9 @@ export async function recategorise(
     else await db.rules.put(rule)
     const ids = new Set(similarTransactionIds(await db.transactions.toArray(), tx))
     const rows = (await db.transactions.bulkGet([...ids])).filter((t): t is Transaction => t !== undefined)
-    const moved = rows.filter((t) => t.categoryId !== categoryId)
-    await db.transactions.bulkPut(moved.map((t) => ({ ...t, categoryId })))
-    return { othersChanged: moved.filter((t) => t.id !== txId).length }
+    const moved = rows.filter((t) => t.categoryId !== categoryId || !t.categoryEditedByUser)
+    await db.transactions.bulkPut(moved.map((t) => ({ ...t, categoryId, categoryEditedByUser: true })))
+    return { othersChanged: moved.filter((t) => t.id !== txId && t.categoryId !== categoryId).length }
   })
 }
 

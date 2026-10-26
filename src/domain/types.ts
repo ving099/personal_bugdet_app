@@ -49,6 +49,11 @@ export interface Transaction {
    * flags alone. Absent (older rows and backups) means false.
    */
   flagsEditedByUser?: boolean
+  /**
+   * True once the owner chose this row's category by hand (Budget's change-category dialog, this row or "apply to all
+   * similar"). Absent (rows categorised by rules, older rows and backups) means false.
+   */
+  categoryEditedByUser?: boolean
   /** Import batch metadata (ISO date-time and file name); absent on rows imported before it was recorded. */
   importedAt?: string
   sourceFile?: string

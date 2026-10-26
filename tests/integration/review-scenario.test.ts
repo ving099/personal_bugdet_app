@@ -1,13 +1,14 @@
 /* Adapted from the final review's cross-module scenario: the money path from CSV to the plan. */
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
-import { monthSummary, trailingSpend } from '../../src/budget/summary'
+import { monthSummary, smoothedIncome, trailingSpend } from '../../src/budget/summary'
 import type { Account, ImportProfile } from '../../src/domain/types'
 import { parseCsv } from '../../src/import/csv'
 import { applyProfile } from '../../src/import/profile'
 import { openDb, type BudgetDB } from '../../src/storage/db'
 import { seedDefaults } from '../../src/storage/seed'
-import { recategorise, setFlag } from '../../src/ui/screens/budget/budgetDb'
+import { assignStream, recategorise, setFlag } from '../../src/ui/screens/budget/budgetDb'
+import { unassignedCredits } from '../../src/ui/screens/budget/budgetModel'
 import { importFiles } from '../../src/ui/screens/import/importDb'
 import { loadInvestData } from '../../src/ui/screens/invest/investDb'
 import { buildInvestView } from '../../src/ui/screens/invest/investModel'
@@ -86,21 +87,35 @@ async function importAll(db: BudgetDB) {
 }
 
 describe('review scenario', () => {
-  it('money from the business account is income on the personal side, not a transfer (I3)', async () => {
+  it('money from the business account is income on the personal side (I3, part 2 important 2)', async () => {
     const db = await fresh()
     await importAll(db)
     const txs = await db.transactions.toArray()
     expect(txs.find((t) => t.description === 'TRANSFER FROM BIZ LTD')?.isTransfer).toBe(false)
     expect(txs.find((t) => t.description === 'TRANSFER TO SAVINGS')?.isTransfer).toBe(true)
     expect(txs.find((t) => t.description === 'PAYMENT RECEIVED THANK YOU')?.isTransfer).toBe(true)
-    // The default keyword rules still file "TRANSFER FROM ..." under Transfers; once the owner files it under Income
-    // it counts. (Before the fix it was flagged as a transfer and could never count.)
+    // The keyword rules file it under Transfers, but it is not a matched pair, so it counts as income.
     const bizIn = txs.find((t) => t.description === 'TRANSFER FROM BIZ LTD')!
-    await recategorise(db, bizIn.id, 'income', false)
-    const data = (await loadInvestData(db))!
+    expect(bizIn.categoryId).toBe('transfers')
+    let data = (await loadInvestData(db))!
     const aug = monthSummary({ month: '2026-08', startDay: 25, txs: data.txs, accounts, categories: data.categories, streams: data.streams })
     // 28 Aug salary + 10 Sep business money fall in the 25 Aug - 24 Sep budget month.
     expect(aug.totalIncomePence).toBe(250000 + 100000)
+    const augTxs = data.txs.filter((t) => t.date >= '2026-08-25' && t.date <= '2026-09-24')
+    expect(unassignedCredits(augTxs, accounts, data.categories).map((t) => t.description)).toContain('TRANSFER FROM BIZ LTD')
+
+    // Assigned to a stream, it gives that stream real history.
+    await db.incomeStreams.put({ id: 'draw', label: 'Business drawings', expectedMonthlyNetPence: 150000 })
+    await assignStream(db, bizIn.id, 'draw', false)
+    data = (await loadInvestData(db))!
+    const inc = smoothedIncome({ asOfMonth: '2026-10', startDay: 25, txs: data.txs, accounts, streams: data.streams, categories: data.categories })
+    expect(inc.perStream.draw).toBe(100000)
+
+    // Filed under Transfers by hand, it is the owner's decision and stays out.
+    await recategorise(db, bizIn.id, 'transfers', false)
+    data = (await loadInvestData(db))!
+    const after = monthSummary({ month: '2026-08', startDay: 25, txs: data.txs, accounts, categories: data.categories, streams: data.streams })
+    expect(after.totalIncomePence).toBe(250000)
   })
 
   it('manual un-flag survives the next import (I3)', async () => {

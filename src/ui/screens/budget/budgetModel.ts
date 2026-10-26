@@ -1,7 +1,8 @@
 import { budgetMonthOf, budgetMonthRange } from '../../../domain/dates'
 import { formatGBP } from '../../../domain/money'
 import type { Account, Category, ISODate, Pence, Transaction } from '../../../domain/types'
-import { isSpendingTx, merchantKey } from '../../../import/matching'
+import { isUnmatchedCardRepayment, merchantKey } from '../../../import/matching'
+import { countsAsIncome } from '../../../budget/summary'
 import { shiftMonth } from '../../../budget/months'
 import { MONTH_NAMES } from '../wizardModel'
 
@@ -70,7 +71,10 @@ export function buildBudgetRows(input: {
   rows.sort((a, b) => b.spentPence - a.spentPence || a.name.localeCompare(b.name))
 
   if (UNCATEGORISED in spentByCategory) {
-    const count = monthTxs.filter((t) => t.categoryId === undefined && countsAsListed(t, accounts) && !t.isTransfer).length
+    // Unmatched card repayments are not spending, so they are not counted here either (they are under "needs attention").
+    const count = monthTxs.filter(
+      (t) => t.categoryId === undefined && countsAsListed(t, accounts) && !t.isTransfer && !isUnmatchedCardRepayment(t, accounts),
+    ).length
     rows.unshift(make(UNCATEGORISED, 'Uncategorised', 0, spentByCategory[UNCATEGORISED], false, count))
   }
   return rows
@@ -89,10 +93,10 @@ export function categoryTransactions(monthTxs: Transaction[], accounts: Account[
     .sort((a, b) => b.date.localeCompare(a.date) || a.description.localeCompare(b.description))
 }
 
-/** Credits that count as income but have no stream yet. */
-export function unassignedCredits(monthTxs: Transaction[], accounts: Account[]): Transaction[] {
+/** Credits that count as income (the same rule as the income totals) but have no stream yet. */
+export function unassignedCredits(monthTxs: Transaction[], accounts: Account[], categories: Category[]): Transaction[] {
   return monthTxs
-    .filter((t) => t.amountPence > 0 && !t.isRefund && isSpendingTx(t, accounts) && !t.incomeStreamId)
+    .filter((t) => !t.incomeStreamId && countsAsIncome(t, accounts, categories))
     .sort((a, b) => b.date.localeCompare(a.date) || a.description.localeCompare(b.description))
 }
 

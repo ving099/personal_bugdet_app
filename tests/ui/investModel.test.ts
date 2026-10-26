@@ -52,7 +52,7 @@ describe('investableInputFor: income and spending', () => {
 
   it('ignores income in an excluded category (categories must reach smoothedIncome)', () => {
     const d = data({
-      txs: [tx({ date: '2026-09-01', amountPence: 100000, categoryId: 'transfers', incomeStreamId: 's' })],
+      txs: [tx({ date: '2026-09-01', amountPence: 100000, categoryId: 'savings-and-investing', incomeStreamId: 's' })],
     })
     // Counted, the stream would fall to its £1,000 average; excluded, there is no history so expected £3,000 stands.
     expect(investableInputFor(d, TODAY).input.incomePence).toBe(300000)

@@ -11,13 +11,15 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 
 /** The seeded Income category: its credits are pay, so they count as income even though it is not spending. */
 export const INCOME_CATEGORY_ID = 'income'
+export const TRANSFERS_CATEGORY_ID = 'transfers'
+export const DEBT_PAYMENTS_CATEGORY_ID = 'debt-payments'
 
 /**
  * Seed categories that are not spending. Loan and card payments are already in the debt minimums, money sent to a
  * platform is investing, and income and transfers are not outgoings, so counting any of them as spending would
  * double-subtract them from what you can invest.
  */
-export const NON_SPENDING_CATEGORY_IDS: readonly string[] = ['debt-payments', 'savings-and-investing', INCOME_CATEGORY_ID, 'transfers']
+export const NON_SPENDING_CATEGORY_IDS: readonly string[] = [DEBT_PAYMENTS_CATEGORY_ID, 'savings-and-investing', INCOME_CATEGORY_ID, TRANSFERS_CATEGORY_ID]
 
 /** The category with the excluded flag set when it is one of the non-spending seed categories. Other fields kept. */
 export function withNonSpendingFlag<T extends Pick<Category, 'id' | 'excludedFromSpending'>>(c: T): T {

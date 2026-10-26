@@ -1,5 +1,5 @@
 import { isSpendingTx, isUnmatchedCardRepayment } from '../import/matching'
-import { INCOME_CATEGORY_ID } from '../seed/categories'
+import { DEBT_PAYMENTS_CATEGORY_ID, INCOME_CATEGORY_ID, TRANSFERS_CATEGORY_ID } from '../seed/categories'
 import type { Account, Category, IncomeStream, Pence, SinkingFund, Transaction } from '../domain/types'
 import { assertStartDay, parseMonth, previousMonths, txsInMonth } from './months'
 
@@ -10,25 +10,114 @@ type Flow = { kind: 'spend'; pence: Pence } | { kind: 'income'; pence: Pence } |
 
 const excludedSet = (categories?: Category[]) => new Set((categories ?? []).filter((c) => c.excludedFromSpending).map((c) => c.id))
 
+/** A credit that is money coming in rather than money back. */
+const isCredit = (tx: Transaction) => tx.amountPence > 0 && !tx.isRefund
+
 /**
  * The single rule for what a row means to the budget. Rows that are transfers, unmatched card repayments
- * (listed under "needs attention" instead) or on non-spending (business/savings) accounts are ignored entirely. Rows in an excludedFromSpending category are never
- * spending, and their credits are not income either (a transfer in, money back from a platform), except in
- * the Income category, which is where pay is filed. Outflows and flagged refunds are spend (positive pence
- * for outflows, negative for refunds); other positive rows are income.
+ * (listed under "needs attention" instead) or on non-spending (business/savings) accounts are ignored entirely.
+ * Rows in an excludedFromSpending category are never spending, and their credits are not income either (money
+ * back from a platform, say), with two exceptions:
+ * - the Income category, which is where pay is filed;
+ * - a Transfers credit that the keyword rules filed there (not the owner by hand, `categoryEditedByUser`). Pairing
+ *   is the authority on what is a real transfer: a matched pair has `isTransfer` and is already ignored above, so an
+ *   unpaired "TRANSFER FROM BIZ LTD" is money arriving from outside, such as business drawings.
+ * Outflows and flagged refunds are spend (positive pence for outflows, negative for refunds); other positive rows
+ * are income.
  */
 function classify(tx: Transaction, accounts: Account[], excluded: Set<string>): Flow {
   if (!isSpendingTx(tx, accounts)) return null
   // Paying a card off moves money, it is not spending; the card's own purchases are the spending.
   if (isUnmatchedCardRepayment(tx, accounts)) return null
   if (tx.categoryId && excluded.has(tx.categoryId)) {
-    const pay = tx.categoryId === INCOME_CATEGORY_ID && tx.amountPence > 0 && !tx.isRefund
-    return pay ? { kind: 'income', pence: tx.amountPence } : null
+    const pay = tx.categoryId === INCOME_CATEGORY_ID && isCredit(tx)
+    const drawing = tx.categoryId === TRANSFERS_CATEGORY_ID && isCredit(tx) && !tx.categoryEditedByUser
+    return pay || drawing ? { kind: 'income', pence: tx.amountPence } : null
   }
   if (tx.amountPence < 0) return { kind: 'spend', pence: -tx.amountPence }
   if (tx.amountPence > 0 && tx.isRefund) return { kind: 'spend', pence: -tx.amountPence }
   if (tx.amountPence > 0) return { kind: 'income', pence: tx.amountPence }
   return null
+}
+
+/** True when the row counts as income (the same rule as monthSummary and smoothedIncome). */
+export function countsAsIncome(tx: Transaction, accounts: Account[], categories: Category[]): boolean {
+  return classify(tx, accounts, excludedSet(categories))?.kind === 'income'
+}
+
+/**
+ * Debt payments as the budget sees them: rows on current or card accounts in the Debt payments category that are not
+ * transfers. Outflows are positive pence, flagged refunds negative. Not spending (the category is excluded), but the
+ * Invest composition and the Budget tab compare them with the minimums on the Debts list.
+ */
+function debtPaymentPence(tx: Transaction, accounts: Account[]): number | null {
+  if (tx.categoryId !== DEBT_PAYMENTS_CATEGORY_ID || !isSpendingTx(tx, accounts)) return null
+  if (isUnmatchedCardRepayment(tx, accounts)) return null
+  if (tx.amountPence < 0) return -tx.amountPence
+  if (tx.amountPence > 0 && tx.isRefund) return -tx.amountPence
+  return null
+}
+
+/** Net Debt payments in one budget month (see debtPaymentPence); never below zero. */
+export function monthDebtPayments(input: { month: string; startDay: number; txs: Transaction[]; accounts: Account[] }): Pence {
+  const rows = txsInMonth(input.txs, input.month, input.startDay)
+  return Math.max(0, sum(rows.map((t) => debtPaymentPence(t, input.accounts) ?? 0)))
+}
+
+/**
+ * Mean over the previous up-to-`months` budget months of the per-month net of `pick` (null rows are skipped).
+ * A month counts only when its net is above zero; see trailingSpend for why.
+ */
+function trailingNetAverage(
+  input: { asOfMonth: string; startDay: number; txs: Transaction[]; months?: number },
+  pick: (t: Transaction) => number | null,
+): { averagePence: Pence; monthsUsed: number } {
+  parseMonth(input.asOfMonth)
+  assertStartDay(input.startDay)
+  const totals: number[] = []
+  for (const month of previousMonths(input.asOfMonth, input.months ?? WINDOW)) {
+    const net = sum(txsInMonth(input.txs, month, input.startDay).map((t) => pick(t) ?? 0))
+    if (net > 0) totals.push(net)
+  }
+  if (totals.length === 0) return { averagePence: 0, monthsUsed: 0 }
+  return { averagePence: Math.round(sum(totals) / totals.length), monthsUsed: totals.length }
+}
+
+/** Trailing monthly average of Debt payments, with the same window and month rules as trailingSpend. */
+export function trailingDebtPayments(input: {
+  asOfMonth: string
+  startDay: number
+  txs: Transaction[]
+  accounts: Account[]
+  months?: number
+}): { averagePence: Pence; monthsUsed: number } {
+  return trailingNetAverage(input, (t) => debtPaymentPence(t, input.accounts))
+}
+
+/**
+ * About how much a month's spending is understated by card repayments that found no card statement: their total
+ * over the trailing window, divided by the months in the window that have spending or such repayments. 0 when none.
+ */
+export function trailingUnmatchedRepayments(input: {
+  asOfMonth: string
+  startDay: number
+  txs: Transaction[]
+  accounts: Account[]
+  categories?: Category[]
+}): Pence {
+  parseMonth(input.asOfMonth)
+  assertStartDay(input.startDay)
+  const excluded = excludedSet(input.categories)
+  let total = 0
+  let months = 0
+  for (const month of previousMonths(input.asOfMonth, WINDOW)) {
+    const rows = txsInMonth(input.txs, month, input.startDay)
+    const repaid = sum(rows.filter((t) => isUnmatchedCardRepayment(t, input.accounts)).map((t) => -t.amountPence))
+    const spent = sum(rows.map((t) => classify(t, input.accounts, excluded)).filter((f) => f?.kind === 'spend').map((f) => f!.pence))
+    if (repaid > 0 || spent > 0) months += 1
+    total += repaid
+  }
+  return months === 0 ? 0 : Math.round(total / months)
 }
 
 /**
@@ -89,20 +178,11 @@ export function trailingSpend(input: {
   categories?: Category[]
   months?: number
 }): { averagePence: Pence; monthsUsed: number } {
-  parseMonth(input.asOfMonth)
-  assertStartDay(input.startDay)
   const excluded = excludedSet(input.categories)
-  const totals: number[] = []
-  for (const month of previousMonths(input.asOfMonth, input.months ?? WINDOW)) {
-    const flows = txsInMonth(input.txs, month, input.startDay)
-      .map((t) => classify(t, input.accounts, excluded))
-      .filter((f) => f?.kind === 'spend')
-    const net = sum(flows.map((f) => f!.pence))
-    if (net <= 0) continue
-    totals.push(net)
-  }
-  if (totals.length === 0) return { averagePence: 0, monthsUsed: 0 }
-  return { averagePence: Math.round(sum(totals) / totals.length), monthsUsed: totals.length }
+  return trailingNetAverage(input, (t) => {
+    const f = classify(t, input.accounts, excluded)
+    return f?.kind === 'spend' ? f.pence : null
+  })
 }
 
 /**

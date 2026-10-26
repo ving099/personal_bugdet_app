@@ -95,7 +95,7 @@ describe('categoryTransactions and unassignedCredits', () => {
       tx({ amountPence: 500, isTransfer: true }),
       tx({ amountPence: 500, accountId: 'biz' }),
     ]
-    expect(unassignedCredits(rows, accounts).map((t) => t.description)).toEqual(['PAYROLL'])
+    expect(unassignedCredits(rows, accounts, seedCategories).map((t) => t.description)).toEqual(['PAYROLL'])
   })
 })
 
@@ -115,5 +115,23 @@ describe('months', () => {
     expect(formatPeriod('2026-10', 1)).toBe('1 Oct – 31 Oct 2026')
     expect(formatPeriod('2026-12', 25)).toBe('25 Dec 2026 – 24 Jan 2027')
     expect(monthLabel('2026-10')).toBe('October 2026')
+  })
+
+  it('lists credits exactly as the income totals count them (part 2, important 2)', () => {
+    const rows = [
+      tx({ amountPence: 100000, description: 'TRANSFER FROM BIZ LTD', categoryId: 'transfers' }),
+      tx({ amountPence: 100000, description: 'MOVED BY HAND', categoryId: 'transfers', categoryEditedByUser: true }),
+      tx({ amountPence: 5000, description: 'PLATFORM WITHDRAWAL', categoryId: 'savings-and-investing' }),
+      tx({ amountPence: 250000, description: 'SALARY', categoryId: 'income' }),
+    ]
+    expect(unassignedCredits(rows, accounts, seedCategories).map((t) => t.description)).toEqual(['SALARY', 'TRANSFER FROM BIZ LTD'])
+  })
+})
+
+describe('the Uncategorised count (part 2, minor 4)', () => {
+  it('leaves out unmatched card repayments, which are not spending', () => {
+    const monthTxs = [tx({ description: 'BARCLAYCARD PAYMENT', amountPence: -25000 }), tx({ description: 'CORNER SHOP', amountPence: -500 })]
+    const rows = buildBudgetRows({ spentByCategory: { uncategorised: 500 }, categories: seedCategories, monthTxs, accounts })
+    expect(rows[0]).toMatchObject({ id: 'uncategorised', count: 1, spentPence: 500 })
   })
 })

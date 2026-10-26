@@ -40,7 +40,7 @@ export default function Budget({ today = todayISO() }: { today?: ISODate }) {
       summary,
       monthTxs,
       rows: buildBudgetRows({ spentByCategory: summary.spentByCategory, categories, monthTxs, accounts }),
-      credits: unassignedCredits(monthTxs, accounts),
+      credits: unassignedCredits(monthTxs, accounts, categories),
     }
   }, [data, month, startDay])
 

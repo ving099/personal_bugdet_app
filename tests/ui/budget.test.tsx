@@ -92,6 +92,18 @@ describe('Budget: categories and progress', () => {
     expect(within(screen.getByText('Left').closest('div')!).getByText('£2,960.00')).toBeInTheDocument()
   })
 
+  it('lists business drawings filed under Transfers as unassigned income and counts them (part 2)', async () => {
+    const db = await freshDb({ streams: [SALARY] })
+    await setup(db, [
+      tx({ amountPence: 100000, description: 'TRANSFER FROM BIZ LTD', categoryId: 'transfers' }),
+      tx({ amountPence: 50000, description: 'MOVED MYSELF', categoryId: 'transfers', categoryEditedByUser: true }),
+    ])
+    const list = await screen.findByRole('list', { name: 'Unassigned credits' })
+    expect(within(list).getByText('TRANSFER FROM BIZ LTD')).toBeInTheDocument()
+    expect(within(list).queryByText('MOVED MYSELF')).not.toBeInTheDocument()
+    expect(within(screen.getByText('Income received').closest('div')!).getByText('£1,000.00')).toBeInTheDocument()
+  })
+
   it('says "No limit set" for a category without a limit', async () => {
     const db = await freshDb()
     await setup(db, [tx({ amountPence: -2500, categoryId: 'travel' })])

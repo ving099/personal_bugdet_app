@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { previousMonths } from '../../src/budget/months'
-import { monthSummary, sinkingMonthlyPence, smoothedIncome, trailingSpend } from '../../src/budget/summary'
+import {
+  countsAsIncome, monthSummary, monthDebtPayments, sinkingMonthlyPence, smoothedIncome, trailingDebtPayments, trailingSpend,
+  trailingUnmatchedRepayments,
+} from '../../src/budget/summary'
 import type { Account, Category, IncomeStream, Transaction } from '../../src/domain/types'
 import { seedCategories } from '../../src/seed/categories'
 
@@ -322,5 +325,82 @@ describe('unmatched card repayments (review I2)', () => {
     const r = monthSummary({ ...b, month: '2026-09', txs: [paired, cardIn, cardSpend, shop] })
     expect(r.totalSpentPence).toBe(8333 + 4520)
     expect(r.totalIncomePence).toBe(0)
+  })
+})
+
+describe('debt payments outside the Debts list (part 2, important 1)', () => {
+  const b = { startDay: 1, accounts, categories: seedCategories }
+  const klarna = (d: string) => tx(d, -4000, { categoryId: 'debt-payments', description: 'KLARNA' })
+  const loan = (d: string) => tx(d, -15000, { categoryId: 'debt-payments', description: 'LOAN REPAYMENT' })
+
+  it('averages Debt payments outflows over the same window as trailingSpend', () => {
+    const txs = [klarna('2026-07-03'), loan('2026-07-04'), klarna('2026-08-03'), loan('2026-08-04'), klarna('2026-09-03'), loan('2026-09-04')]
+    expect(trailingDebtPayments({ ...b, asOfMonth: '2026-10', txs })).toEqual({ averagePence: 19000, monthsUsed: 3 })
+    expect(trailingSpend({ ...b, asOfMonth: '2026-10', txs })).toEqual({ averagePence: 0, monthsUsed: 0 })
+  })
+
+  it('handles net-refund months the same way and ignores other categories, transfers and business rows', () => {
+    const txs = [
+      klarna('2026-09-03'),
+      tx('2026-08-03', -4000, { categoryId: 'debt-payments' }),
+      tx('2026-08-10', 9000, { categoryId: 'debt-payments', isRefund: true }),
+      tx('2026-09-05', -7000, { categoryId: 'debt-payments', isTransfer: true }),
+      tx('2026-09-06', -7000, { categoryId: 'debt-payments', accountId: 'biz' }),
+      tx('2026-09-07', -7000, { categoryId: 'groceries-and-food' }),
+    ]
+    expect(trailingDebtPayments({ ...b, asOfMonth: '2026-10', txs })).toEqual({ averagePence: 4000, monthsUsed: 1 })
+  })
+
+  it('reports one month of Debt payments for the Budget line', () => {
+    expect(monthDebtPayments({ ...b, month: '2026-09', txs: [klarna('2026-09-03'), loan('2026-09-04'), klarna('2026-10-03')] })).toBe(19000)
+  })
+})
+
+describe('business drawings filed under Transfers (part 2, important 2)', () => {
+  const b = { startDay: 1, accounts, categories: seedCategories, streams }
+  const drawing = (o: Partial<Transaction> = {}) =>
+    tx('2026-09-10', 100000, { categoryId: 'transfers', description: 'TRANSFER FROM BIZ LTD', ...o })
+
+  it('an unpaired Transfers credit counts as income everywhere', () => {
+    const t = drawing()
+    expect(countsAsIncome(t, accounts, seedCategories)).toBe(true)
+    expect(monthSummary({ ...b, month: '2026-09', txs: [t] }).incomeByStream).toEqual({ unassigned: 100000 })
+    expect(smoothedIncome({ ...b, asOfMonth: '2026-10', txs: [t] }).unassignedAveragePence).toBe(100000)
+  })
+
+  it('a matched transfer pair stays out', () => {
+    const t = drawing({ isTransfer: true })
+    expect(countsAsIncome(t, accounts, seedCategories)).toBe(false)
+    expect(monthSummary({ ...b, month: '2026-09', txs: [t] }).totalIncomePence).toBe(0)
+  })
+
+  it('a credit the owner filed under Transfers by hand stays out', () => {
+    const t = drawing({ categoryEditedByUser: true })
+    expect(countsAsIncome(t, accounts, seedCategories)).toBe(false)
+    expect(monthSummary({ ...b, month: '2026-09', txs: [t] }).totalIncomePence).toBe(0)
+  })
+
+  it('an outflow under Transfers is still not spending', () => {
+    const t = tx('2026-09-10', -5000, { categoryId: 'transfers', description: 'TRANSFER TO BIZ' })
+    expect(monthSummary({ ...b, month: '2026-09', txs: [t] }).totalSpentPence).toBe(0)
+  })
+
+  it('assigned to a stream, a drawing gives that stream actual history', () => {
+    const r = smoothedIncome({ ...b, asOfMonth: '2026-10', txs: [drawing({ incomeStreamId: 's1' })] })
+    expect(r.monthsUsed).toBe(1)
+    expect(r.perStream.s1).toBe(100000)
+  })
+})
+
+describe('trailingUnmatchedRepayments (part 2, minor 2)', () => {
+  it('averages unmatched card repayments over the months in the window that have spending or repayments', () => {
+    const txs = [
+      tx('2026-07-05', -10000, { categoryId: 'groceries-and-food' }),
+      tx('2026-08-05', -10000, { categoryId: 'groceries-and-food' }),
+      tx('2026-08-06', -30000, { description: 'BARCLAYCARD PAYMENT' }),
+      tx('2026-09-06', -30000, { description: 'BARCLAYCARD PAYMENT', isTransfer: true }),
+    ]
+    expect(trailingUnmatchedRepayments({ startDay: 1, accounts, categories: seedCategories, asOfMonth: '2026-10', txs })).toBe(15000)
+    expect(trailingUnmatchedRepayments({ startDay: 1, accounts, categories: seedCategories, asOfMonth: '2026-10', txs: txs.slice(0, 2) })).toBe(0)
   })
 })
