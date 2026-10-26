@@ -58,9 +58,11 @@ describe('buildMonthlyPlan', () => {
   it('warns when Robinhood is the ISA platform with the seed UCITS funds', () => {
     const p = buildMonthlyPlan(make({ defaultPlatformByWrapper: { isa: 'robinhood' } }))
     const w = p.warnings.filter((x) => x.includes('Robinhood'))
-    expect(w.length).toBeGreaterThan(0)
+    expect(w).toHaveLength(1)
     expect(w[0]).toMatch(/ISA/)
-    expect(w[0]).toMatch(/VWRL|Vanguard FTSE All-World/)
+    expect(w[0]).toContain('Vanguard FTSE All-World')
+    expect(w[0]).toContain('iShares Core S&P 500')
+    expect(w[0]).toContain('Invesco EQQQ')
     expect(w[0]).toMatch(/another platform/)
   })
 
@@ -135,8 +137,51 @@ describe('buildMonthlyPlan', () => {
     const growthOnly: Holding[] = seedHoldings.filter((h) => h.bucket === 'growth')
     const p = buildMonthlyPlan(make({ holdings: growthOnly }))
     expect(p.warnings).toContain('No aggressive holdings configured — add one in Settings')
-    expect(p.holdings.find((h) => h.holdingId === 'unallocated')?.pence).toBe(30000)
+    expect(p.holdings.find((h) => h.holdingId === 'unallocated-aggressive')?.pence).toBe(30000)
     expect(p.holdings.reduce((a, h) => a + h.pence, 0)).toBe(100001)
     for (const l of p.lines) expect(l.holdings.reduce((a, h) => a + h.pence, 0)).toBe(l.pence)
+  })
+
+  it('treats an all-zero-weight bucket as empty: warning, unallocated-growth line, exact total', () => {
+    const zeroed = seedHoldings.map((h) => (h.bucket === 'growth' ? { ...h, weight: 0 } : h))
+    const p = buildMonthlyPlan(make({ holdings: zeroed }))
+    expect(p.warnings).toContain('No growth holdings configured — add one in Settings')
+    expect(p.holdings.find((h) => h.holdingId === 'unallocated-growth')?.pence).toBe(70001)
+    expect(p.holdings.reduce((a, h) => a + h.pence, 0)).toBe(100001)
+    for (const l of p.lines) expect(l.holdings.reduce((a, h) => a + h.pence, 0)).toBe(l.pence)
+  })
+
+  it('ignores a negative-weight holding with a warning and continues', () => {
+    const bad = seedHoldings.map((h) => (h.id === 'growth-us' ? { ...h, weight: -1 } : h))
+    const p = buildMonthlyPlan(make({ holdings: bad }))
+    expect(p.warnings).toContain('iShares Core S&P 500 UCITS ETF has an invalid weight and was ignored')
+    expect(p.holdings.find((h) => h.holdingId === 'growth-us')).toBeUndefined()
+    expect(p.holdings.find((h) => h.holdingId === 'growth-global')?.pence).toBe(70001)
+    expect(p.holdings.reduce((a, h) => a + h.pence, 0)).toBe(100001)
+  })
+
+  it('a bucket whose only holding is invalid becomes empty', () => {
+    const bad = seedHoldings.map((h) => (h.bucket === 'growth' ? { ...h, weight: Number.NaN } : h))
+    const p = buildMonthlyPlan(make({ holdings: bad }))
+    expect(p.warnings).toContain('No growth holdings configured — add one in Settings')
+    expect(p.holdings.reduce((a, h) => a + h.pence, 0)).toBe(100001)
+  })
+
+  it('keeps two separate unallocated entries when both buckets are empty', () => {
+    const p = buildMonthlyPlan(make({ holdings: [] }))
+    const g = p.holdings.find((h) => h.holdingId === 'unallocated-growth')
+    const a = p.holdings.find((h) => h.holdingId === 'unallocated-aggressive')
+    expect(g).toMatchObject({ bucket: 'growth', pence: 70001 })
+    expect(a).toMatchObject({ bucket: 'aggressive', pence: 30000 })
+    expect(p.holdings).toHaveLength(2)
+    expect(p.warnings).toContain('No growth holdings configured — add one in Settings')
+    expect(p.warnings).toContain('No aggressive holdings configured — add one in Settings')
+  })
+
+  it('gives a distinct warning for a platform id not in the list and skips fund checks', () => {
+    const p = buildMonthlyPlan(make({ defaultPlatformByWrapper: { isa: 'nope' } }))
+    expect(p.warnings).toEqual([
+      "Platform 'nope' (chosen for ISA) isn't in your platform list — pick another in Settings.",
+    ])
   })
 })

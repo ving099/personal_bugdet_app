@@ -37,4 +37,25 @@ describe('splitBuckets', () => {
   it('throws RangeError for a negative amount', () => {
     expect(() => splitBuckets(-1, split, seedHoldings)).toThrow(RangeError)
   })
+
+  it('throws a clear Error naming the bucket for all-zero weights', () => {
+    const zeroed = seedHoldings.map((h) => (h.bucket === 'aggressive' ? { ...h, weight: 0 } : h))
+    expect(() => splitBuckets(1000, split, zeroed)).toThrow(/aggressive.*zero/)
+    expect(() => splitBuckets(1000, split, zeroed)).not.toThrow(RangeError)
+  })
+
+  it('throws a clear Error naming the bucket for negative or non-finite weights', () => {
+    const neg = seedHoldings.map((h) => (h.id === 'growth-us' ? { ...h, weight: -1 } : h))
+    expect(() => splitBuckets(1000, split, neg)).toThrow(/growth.*invalid weight/)
+    expect(() => splitBuckets(1000, split, neg)).not.toThrow(RangeError)
+    const nan = seedHoldings.map((h) => (h.id === 'aggressive-em' ? { ...h, weight: Number.NaN } : h))
+    expect(() => splitBuckets(1000, split, nan)).toThrow(/aggressive.*invalid weight/)
+  })
+
+  it('gives a zero-weight holding 0 pence when others in the bucket are positive', () => {
+    const mixed = seedHoldings.map((h) => (h.id === 'growth-us' ? { ...h, weight: 0 } : h))
+    const parts = splitBuckets(10000, split, mixed)
+    expect(pence(parts, 'growth-us')).toBe(0)
+    expect(pence(parts, 'growth-global')).toBe(7000)
+  })
 })
