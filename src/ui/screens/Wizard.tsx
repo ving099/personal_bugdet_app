@@ -8,7 +8,7 @@ import { todayISO } from '../formValues'
 import { useDb } from '../useDb'
 import { validateMonthStartDay, validatePercent } from './settingsValidation'
 import {
-  WIZARD_STEPS, aprOk, buildWrites, emptyDraft, isoDateOk, monthlySetAside, stepValid,
+  WIZARD_STEPS, aprOk, buildWrites, emptyDraft, isoDateOk, monthlySetAside, sortHoldings, stepValid,
   type StepIndex, type WizardDraft,
 } from './wizardModel'
 
@@ -468,9 +468,7 @@ export default function Wizard({ today = todayISO() }: { today?: string }) {
   const db = useDb()
   const data = useLiveQuery(async () => ({
     settings: await db.settings.get('main'),
-    holdings: (await db.holdings.toArray()).sort(
-      (a, b) => Number(a.bucket !== 'growth') - Number(b.bucket !== 'growth') || b.weight - a.weight || a.id.localeCompare(b.id),
-    ),
+    holdings: sortHoldings(await db.holdings.toArray()),
     platforms: await db.platforms.toArray(),
   }), [db])
   if (!data?.settings) return <div className="loading" role="status">Loading</div>

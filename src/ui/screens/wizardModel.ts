@@ -204,3 +204,10 @@ export function buildWrites(d: WizardDraft, ctx: WizardContext): WizardWrites {
     },
   }
 }
+
+/** Growth bucket first, then heavier weights first, so lists read the same everywhere. */
+export function sortHoldings<T extends { bucket: string; weight: number; id: string }>(rows: T[]): T[] {
+  return [...rows].sort(
+    (a, b) => Number(a.bucket !== 'growth') - Number(b.bucket !== 'growth') || b.weight - a.weight || a.id.localeCompare(b.id),
+  )
+}

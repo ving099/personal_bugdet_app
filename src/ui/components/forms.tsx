@@ -1,4 +1,4 @@
-import { useId, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useId, useState, type ComponentProps, type ReactNode } from 'react'
 import { moneyFieldError } from '../formValues'
 
 export interface ControlProps {
@@ -192,9 +192,7 @@ export function Checkbox({ label, checked, onChange, hint, disabled }: CheckboxP
   )
 }
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger'
-}
+type ButtonProps = ComponentProps<'button'> & { variant?: 'primary' | 'secondary' | 'danger' }
 
 export function Button({ variant = 'secondary', className, type = 'button', ...rest }: ButtonProps) {
   const cls = `btn btn-${variant}${className ? ` ${className}` : ''}`

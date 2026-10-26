@@ -11,6 +11,7 @@ import { panelId, tabId } from './components/tabIds'
 import TabNav, { type TabItem } from './components/Tabs'
 import LockScreen from './LockScreen'
 import { DbProvider } from './DbProvider'
+import Settings from './screens/Settings'
 import Wizard from './screens/Wizard'
 import { useMediaQuery } from './useMediaQuery'
 
@@ -57,12 +58,7 @@ const SCREENS: Record<TabKey, () => ReactNode> = {
       body="After you import a month of income and spending, this page shows what is safe to invest."
     />
   ),
-  settings: () => (
-    <EmptyState
-      title="Settings are on the way"
-      body="Theme, passcode lock and backups will live here."
-    />
-  ),
+  settings: () => <Settings />,
 }
 
 const TAB_KEY = 'budget.lastTab'
@@ -128,6 +124,8 @@ function Ready({ db }: { db: BudgetDB }) {
   }, [settings?.theme])
 
   if (!settings) return <Loading />
+  // A lock set while the app is open must not lock the person out of the session they are in.
+  if (!settings.appLock && !unlocked) setUnlocked(true)
   if (settings.appLock && !unlocked) {
     return <LockScreen stored={settings.appLock} onUnlock={() => setUnlocked(true)} />
   }
