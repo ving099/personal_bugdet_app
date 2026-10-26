@@ -161,6 +161,35 @@ describe('buildWorkbook', () => {
     expect(texts).not.toContain(0.01)
   })
 
+  it('names the platform, or says it is not chosen yet, and leaves out the GIA allowance row (review M2)', async () => {
+    const plan: MonthlyPlan = {
+      ...okPlan,
+      lines: [
+        { wrapper: 'pension', pence: 2500, platformId: 'choose', holdings: [{ holdingId: 'h1', bucket: 'growth', pence: 2500 }] },
+        { wrapper: 'isa', pence: 7500, platformId: 'hl', holdings: [{ holdingId: 'h1', bucket: 'growth', pence: 7500 }] },
+      ],
+    }
+    const ws = (await load(data({
+      plan,
+      platforms: [{ id: 'hl', name: 'Hargreaves Lansdown', wrappersSupported: ['isa'], notes: '', lastChecked: '2026-01-01' }],
+    }))).getWorksheet('Investment plan')!
+    expect(find(ws, 'Pension')!.getCell(2).value).toBe('Not chosen yet')
+    expect(find(ws, 'ISA')!.getCell(2).value).toBe('Hargreaves Lansdown')
+    const texts: unknown[] = []
+    ws.eachRow((r) => r.eachCell((c) => texts.push(c.value)))
+    expect(texts).not.toContain('choose')
+    expect(find(ws, 'GIA allowance')).toBeUndefined()
+    expect(find(ws, 'ISA allowance')).toBeTruthy()
+  })
+
+  it('explains an invalid-data plan in plain words', async () => {
+    const plan = { ...okPlan, ok: false, reason: 'invalid-data' as const, lines: [], holdings: [] }
+    const ws = (await load(data({ plan }))).getWorksheet('Investment plan')!
+    const texts: string[] = []
+    ws.eachRow((r) => r.eachCell((c) => texts.push(String(c.value))))
+    expect(texts.some((t) => t.includes("We couldn't work out a figure from your data."))).toBe(true)
+  })
+
   it('shows reason when plan is not ok', async () => {
     const plan = { ...okPlan, ok: false, reason: 'no-surplus' as const, lines: [], holdings: [] }
     const ws = (await load(data({ plan }))).getWorksheet('Investment plan')!

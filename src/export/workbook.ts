@@ -227,7 +227,7 @@ function planSheet(wb: ExcelJS.Workbook, d: ExportData) {
     for (const l of plan.lines) {
       const r = ws.getRow(row++)
       r.getCell(1).value = WRAPPER_LABEL[l.wrapper]
-      r.getCell(2).value = text(pname.get(l.platformId) ?? l.platformId)
+      r.getCell(2).value = l.platformId === 'choose' ? 'Not chosen yet' : text(pname.get(l.platformId) ?? l.platformId)
       money(r.getCell(3), l.pence)
     }
     row++
@@ -249,7 +249,8 @@ function planSheet(wb: ExcelJS.Workbook, d: ExportData) {
   }
   row++
   heading(`Allowances ${d.allowances.taxYear}`, 'Limit', 'Used this tax year (to date)', 'Remaining')
-  for (const w of WRAPPERS) {
+  // A general investment account has no yearly allowance, so it gets no row.
+  for (const w of WRAPPERS.filter((x) => x !== 'gia')) {
     const r = ws.getRow(row)
     r.getCell(1).value = `${WRAPPER_LABEL[w]} allowance`
     money(r.getCell(2), d.allowances.limits[w] ?? 0)
