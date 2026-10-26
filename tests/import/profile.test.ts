@@ -62,6 +62,51 @@ describe('applyProfile', () => {
   })
 })
 
+describe('applyProfile amount strictness', () => {
+  const dc: ImportProfile = { ...base, amountMode: 'debitCredit', debitColumn: 2, creditColumn: 3 }
+  const run = (r: string[][], p: ImportProfile) => () => applyProfile(r, { ...p, headerRows: 0 }, 'a')
+
+  it('single: blank amount cell throws naming the row', () => {
+    expect(run([['03/04/2026', 'x', '1.00'], ['03/04/2026', 'x', '  ']], base)).toThrow(/row 2/)
+    expect(run([['03/04/2026', 'x', '  ']], base)).toThrow(ProfileError)
+  })
+  it('single: missing cell (short row) throws', () => {
+    expect(run([['03/04/2026', 'x']], base)).toThrow(/row 1/)
+  })
+  it('single: undefined amountColumn throws ProfileError', () => {
+    expect(run([['03/04/2026', 'x', '1.00']], { ...base, amountColumn: undefined })).toThrow(ProfileError)
+  })
+  it('single: out-of-range amountColumn throws', () => {
+    expect(run([['03/04/2026', 'x', '1.00']], { ...base, amountColumn: 9 })).toThrow(/row 1/)
+  })
+  it('single: a real zero is valid', () => {
+    expect(applyProfile([['03/04/2026', 'x', '0.00']], { ...base, headerRows: 0 }, 'a')[0].amountPence).toBe(0)
+  })
+  it('debitCredit: one blank cell counts as zero', () => {
+    const out = applyProfile([['03/04/2026', 'x', '', '5.00'], ['03/04/2026', 'x', '2.00']], { ...dc, headerRows: 0 }, 'a')
+    expect(out.map(t => t.amountPence)).toEqual([500, -200])
+  })
+  it('debitCredit: both blank or missing throws naming the row', () => {
+    expect(run([['03/04/2026', 'x', '1.00', ''], ['03/04/2026', 'x', '', '']], dc)).toThrow(/row 2/)
+    expect(run([['03/04/2026', 'x']], dc)).toThrow(/row 1/)
+  })
+  it('debitCredit: undefined debit or credit column throws', () => {
+    const r = [['03/04/2026', 'x', '1.00', '']]
+    expect(run(r, { ...dc, debitColumn: undefined })).toThrow(ProfileError)
+    expect(run(r, { ...dc, creditColumn: undefined })).toThrow(ProfileError)
+  })
+  it('debitCredit: a real zero in one column is valid', () => {
+    expect(applyProfile([['03/04/2026', 'x', '0.00', '']], { ...dc, headerRows: 0 }, 'a')[0].amountPence).toBe(0)
+  })
+  it('debitCredit: positiveIsOut is ignored', () => {
+    const r = [['03/04/2026', 'x', '4.50', ''], ['03/04/2026', 'x', '', '2.00']]
+    const a = applyProfile(r, { ...dc, headerRows: 0, signConvention: 'positiveIsOut' }, 'a')
+    const b = applyProfile(r, { ...dc, headerRows: 0, signConvention: 'negativeIsOut' }, 'a')
+    expect(a).toEqual(b)
+    expect(a.map(t => t.amountPence)).toEqual([-450, 200])
+  })
+})
+
 describe('guessProfile', () => {
   it('single amount', () => {
     expect(guessProfile(rows('single-amount.csv'))).toMatchObject({

@@ -39,25 +39,28 @@ function parseDate(raw: string, format: ImportProfile['dateFormat']): ISODate | 
   }
 }
 
-function cellAmount(cell: string | undefined): Pence {
-  const t = (cell ?? '').trim()
-  return t === '' ? 0 : toPence(t)
-}
-
 export function applyProfile(rows: string[][], profile: ImportProfile, accountId: string): ParsedTx[] {
   return rows.slice(profile.headerRows).map((row, i) => {
     const n = i + 1
     const date = parseDate(row[profile.dateColumn] ?? '', profile.dateFormat)
     if (!date) throw new ProfileError(`Unreadable date "${row[profile.dateColumn] ?? ''}" in row ${n}`)
     let amountPence: Pence
+    const cell = (col: number | undefined, label: string): string | undefined => {
+      if (col === undefined || col < 0) throw new ProfileError(`No ${label} column set in profile (row ${n})`)
+      const t = (row[col] ?? '').trim()
+      return t === '' ? undefined : t
+    }
     try {
       if (profile.amountMode === 'single') {
-        const v = cellAmount(row[profile.amountColumn ?? -1])
+        const raw = cell(profile.amountColumn, 'amount')
+        if (raw === undefined) throw new ProfileError(`Missing amount in row ${n}`)
+        const v = toPence(raw)
         amountPence = profile.signConvention === 'positiveIsOut' ? -v : v
       } else {
-        const debit = cellAmount(row[profile.debitColumn ?? -1])
-        const credit = cellAmount(row[profile.creditColumn ?? -1])
-        amountPence = credit - debit
+        const debit = cell(profile.debitColumn, 'debit')
+        const credit = cell(profile.creditColumn, 'credit')
+        if (debit === undefined && credit === undefined) throw new ProfileError(`Missing debit and credit amounts in row ${n}`)
+        amountPence = (credit === undefined ? 0 : toPence(credit)) - (debit === undefined ? 0 : toPence(debit))
       }
     } catch (e) {
       if (e instanceof MoneyParseError) throw new ProfileError(`Unreadable amount in row ${n}: ${e.message}`)

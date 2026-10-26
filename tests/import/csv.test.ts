@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { parseCsv } from '../../src/import/csv'
+import { parseCsv, CsvParseError } from '../../src/import/csv'
 
 const fixture = (n: string) => readFileSync(`tests/fixtures/${n}`, 'utf8')
 
@@ -16,5 +16,13 @@ describe('parseCsv', () => {
 
   it('drops blank lines in the middle', () => {
     expect(parseCsv('a,b\n\n1,2\n')).toEqual([['a', 'b'], ['1', '2']])
+  })
+
+  it('throws CsvParseError on an unterminated quote', () => {
+    expect(() => parseCsv('a,b\n1,"oops\n2,3\n')).toThrow(CsvParseError)
+  })
+
+  it('still parses a ragged row with too few fields', () => {
+    expect(parseCsv('a,b,c\n1,2\n3,4,5\n')).toEqual([['a', 'b', 'c'], ['1', '2'], ['3', '4', '5']])
   })
 })
