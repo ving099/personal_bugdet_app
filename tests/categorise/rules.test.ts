@@ -38,6 +38,31 @@ describe('categorise', () => {
     expect(categorise('COSTA COFFEE 12', [long, short])).toBe('travel')
   })
 
+  it('learned key with a stripped ref still matches later descriptions', () => {
+    const rules = [learnRule('AMAZON.CO.UK*2K4 LONDON', 'gifts')]
+    expect(categorise('AMAZON.CO.UK*9X1 LONDON', rules)).toBe('gifts')
+    expect(categorise('AMAZON.CO.UK*2K4 LONDON', rules)).toBe('gifts')
+  })
+
+  it('learned key with mid-string digits matches other digits', () => {
+    const rules = [learnRule('COSTA 0912 LONDON', 'gifts')]
+    expect(categorise('COSTA 0345 LONDON', rules)).toBe('gifts')
+  })
+
+  it('default longest wins: uber eats vs uber', () => {
+    expect(categorise('UBER EATS HELP.UBER.COM', defaultRules)).toBe('eating-out')
+    expect(categorise('UBER TRIP', defaultRules)).toBe('transport')
+  })
+
+  it.each([
+    ['COUNCIL TAX DD'],
+    ['TV LICENCE 1234'],
+    ['TALKTALK BROADBAND'],
+    ['AVIVA INSURANCE'],
+  ])('bill word: %s', (d) => {
+    expect(categorise(d, defaultRules)).toBe('direct-debits-and-bills')
+  })
+
   it('ignores rules with empty matchText', () => {
     const r: Rule = { id: 'e', matchText: '', categoryId: 'gifts', source: 'learned' }
     expect(categorise('anything', [r])).toBeUndefined()
