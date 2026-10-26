@@ -21,7 +21,7 @@ export default function ImportHistory({ batches, accounts, accountId, onUndo }: 
 
   return (
     <section className="import-section" aria-labelledby="history-heading">
-      <h2 className="import-heading" id="history-heading">
+      <h2 className="import-heading" id="history-heading" tabIndex={-1}>
         Import history
       </h2>
       <Select label="Show history for" value={filter} options={options} onChange={setOverride} />

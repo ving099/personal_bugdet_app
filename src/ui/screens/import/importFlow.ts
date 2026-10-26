@@ -33,7 +33,7 @@ export function formatDisplayDate(iso: ISODate): string {
  */
 export function sniffDateFormat(values: readonly string[]): { format: DateFormat; ambiguous: boolean } {
   const cells = values.map((v) => v.trim()).filter((v) => v !== '')
-  if (cells.length > 0 && cells.every((v) => /^\d{4}-\d{1,2}-\d{1,2}$/.test(v))) {
+  if (cells.length > 0 && cells.every((v) => /^\d{4}-\d{2}-\d{2}$/.test(v))) {
     return { format: 'YYYY-MM-DD', ambiguous: false }
   }
   if (cells.length > 0 && cells.every((v) => /^\d{1,2} [A-Za-z]{3} \d{4}$/.test(v))) {

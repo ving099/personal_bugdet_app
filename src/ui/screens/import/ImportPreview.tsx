@@ -6,28 +6,31 @@ import { formatDisplayDate, plural, PREVIEW_ROW_LIMIT, summaryLine, type Preview
 
 interface ImportPreviewProps {
   preview: Preview
-  fileCount: number
+  fileNames: string[]
   busy: boolean
   error: string
   onConfirm: () => void
   onEditMapping: () => void
 }
 
-export default function ImportPreview({ preview, fileCount, busy, error, onConfirm, onEditMapping }: ImportPreviewProps) {
+export default function ImportPreview({ preview, fileNames, busy, error, onConfirm, onEditMapping }: ImportPreviewProps) {
   const [hideDuplicates, setHideDuplicates] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const rows = hideDuplicates ? preview.rows.filter((r) => !r.duplicate) : preview.rows
   const visible = showAll ? rows : rows.slice(0, PREVIEW_ROW_LIMIT)
   const nothingNew = preview.newRows === 0
+  const fileCount = fileNames.length
+  const empty = preview.rows.length === 0
 
   return (
     <section className="import-section" aria-labelledby="preview-heading">
-      <h2 className="import-heading" id="preview-heading">
+      <h2 className="import-heading" id="preview-heading" tabIndex={-1}>
         Check before importing
       </h2>
       <Card>
         <p className="preview-summary">{summaryLine(preview)}</p>
-        {nothingNew && (
+        {empty && <p className="import-hint">No transactions found in {fileNames.join(', ')}.</p>}
+        {nothingNew && !empty && (
           <p className="import-hint">
             Nothing new to import. {preview.duplicates === 1 ? 'The row is' : `All ${preview.duplicates} rows are`} already in your records.
           </p>

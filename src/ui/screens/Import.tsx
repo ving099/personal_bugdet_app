@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { unmatchedCardRepayments } from '../../import/matching'
 import { applyProfile, ProfileError } from '../../import/profile'
 import type { ImportProfile } from '../../domain/types'
@@ -49,7 +49,10 @@ export default function Import() {
   const [undoTarget, setUndoTarget] = useState<UndoTarget | null>(null)
   const [undoBusy, setUndoBusy] = useState(false)
   const [undoError, setUndoError] = useState('')
+  const [flagsFailed, setFlagsFailed] = useState(false)
   const working = useRef(false)
+  const readToken = useRef(0)
+  const focusPreview = useRef(false)
   const noticeRef = useRef<HTMLDivElement>(null)
 
   const accountId = chosen || (accounts?.length === 1 ? accounts[0].id : '')
@@ -73,6 +76,13 @@ export default function Import() {
   const batches = useMemo(() => (txs && accounts ? summariseBatches(txs, accounts) : []), [txs, accounts])
   const attention = useMemo(() => (txs && accounts ? unmatchedCardRepayments(txs, accounts) : []), [txs, accounts])
 
+  useEffect(() => {
+    if (preview && focusPreview.current) {
+      focusPreview.current = false
+      document.getElementById('preview-heading')?.focus()
+    }
+  }, [preview])
+
   if (!accounts || !txs || !profiles) return <div className="loading" role="status">Loading</div>
 
   if (accounts.length === 0 || adding) {
@@ -90,15 +100,19 @@ export default function Import() {
     setConfirmError('')
     setOutcomes([])
     setNotice('')
+    setFlagsFailed(false)
   }
 
   async function takeFiles(list: File[]) {
+    if (busy || reading) return
     reset()
+    const token = ++readToken.current
     setReading(true)
     try {
-      setStaged(await Promise.all(list.map(readStatement)))
+      const read = await Promise.all(list.map(readStatement))
+      if (token === readToken.current) setStaged(read)
     } finally {
-      setReading(false)
+      if (token === readToken.current) setReading(false)
     }
   }
 
@@ -118,6 +132,7 @@ export default function Import() {
     } catch {
       return "Couldn't save the mapping. Try again."
     }
+    focusPreview.current = true
     setEditing(false)
     return undefined
   }
@@ -131,11 +146,14 @@ export default function Import() {
       const out = await importFiles(db, files)
       setOutcomes(out.results)
       setNotice('')
+      setFlagsFailed(Boolean(out.flagsFailed))
       if (out.failed) {
         setConfirmError(`Couldn't import ${out.failed.fileName}, so nothing from it was saved. Your other records are unchanged.`)
       } else {
         setStaged([])
       }
+    } catch {
+      setConfirmError("Couldn't import these files. Nothing was changed. Try again.")
     } finally {
       working.current = false
       setBusy(false)
@@ -172,6 +190,7 @@ export default function Import() {
           label="Account"
           value={accountId}
           options={accountOptions}
+          disabled={busy || reading}
           onChange={(v) => { setChosen(v); reset() }}
           hint="Pick the account first. Statement files rarely say which account they belong to."
         />
@@ -179,7 +198,7 @@ export default function Import() {
           <p className="import-hint">Business accounts are excluded from your spending, but stay in your export.</p>
         )}
         <Button className="link-btn" onClick={() => setAdding(true)}>Add another account</Button>
-        <FileDrop onFiles={(f) => void takeFiles(f)} disabled={!account} busy={reading} />
+        <FileDrop onFiles={(f) => void takeFiles(f)} disabled={!account || busy} busy={reading} />
         {account && profile && staged.length === 0 && (
           <p className="import-hint">This account already has a saved layout, so choose a file and it will be read straight away.</p>
         )}
@@ -210,7 +229,7 @@ export default function Import() {
       {preview && files && (
         <ImportPreview
           preview={preview}
-          fileCount={files.length}
+          fileNames={files.map((f) => f.name)}
           busy={busy}
           error={confirmError}
           onConfirm={() => void confirm()}
@@ -220,6 +239,9 @@ export default function Import() {
 
       <div ref={noticeRef} tabIndex={-1} className="result-region" role="status">
         {notice && <p className="result-line">{notice}</p>}
+        {flagsFailed && outcomes.length > 0 && (
+          <p className="result-line">Imported, but transfers and refunds couldn't be re-checked. They'll be fixed on your next import.</p>
+        )}
         {live.length > 0 && (
           <section className="import-section" aria-labelledby="result-heading">
             <h2 className="import-heading" id="result-heading">Done</h2>
@@ -256,6 +278,7 @@ export default function Import() {
           title="Undo this import?"
           confirmLabel="Undo import"
           busy={undoBusy}
+          fallbackFocusId="history-heading"
           error={undoError}
           onCancel={() => { setUndoTarget(null); setUndoError('') }}
           onConfirm={() => void undo()}

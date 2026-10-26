@@ -140,13 +140,14 @@ interface SelectProps<V extends string> {
   onChange: (value: V) => void
   options: readonly { value: V; label: string }[]
   hint?: string
+  disabled?: boolean
 }
 
-export function Select<V extends string>({ label, value, onChange, options, hint }: SelectProps<V>) {
+export function Select<V extends string>({ label, value, onChange, options, hint, disabled }: SelectProps<V>) {
   return (
     <Field label={label} hint={hint}>
       {(c) => (
-        <select {...c} className="input input-select" value={value} onChange={(e) => onChange(e.target.value as V)}>
+        <select {...c} className="input input-select" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as V)}>
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}

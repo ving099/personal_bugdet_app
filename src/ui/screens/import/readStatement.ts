@@ -22,6 +22,7 @@ export async function readStatement(file: File): Promise<StagedFile> {
   try {
     const text = (await readText(file)).replace(/^﻿/, '')
     if (text.includes('\u0000')) return { name, error: `${name} isn't a CSV file.` }
+    if (text.trim() === '') return { name, error: `${name} is empty.` }
     const rows = parseCsv(text)
     if (rows.length === 0) return { name, error: `${name} is empty.` }
     return { name, rows }

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Dexie from 'dexie'
 import { readFileSync } from 'node:fs'
@@ -277,6 +277,73 @@ describe('Import: repeat, undo and history', () => {
   })
 })
 
+describe('Import: focus, busy and edge cases', () => {
+  async function importedOnce() {
+    const db = await freshDb()
+    const user = setup(db)
+    await pickAccount(user, 'Everyday')
+    await mapAndPreview(user, csv('single-amount.csv', fixture('single-amount.csv')))
+    await importNow(user)
+    return { db, user }
+  }
+
+  it('returns focus to the Undo button after Cancel and after Escape', async () => {
+    const { user } = await importedOnce()
+    const opener = () => screen.getAllByRole('button', { name: 'Undo import of single-amount.csv' })[1]
+    await user.click(opener())
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+    expect(opener()).toHaveFocus()
+    await user.click(opener())
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(opener()).toHaveFocus()
+  })
+
+  it('moves focus to the preview heading after saving the mapping', async () => {
+    const db = await freshDb()
+    const user = setup(db)
+    await pickAccount(user, 'Everyday')
+    await mapAndPreview(user, csv('single-amount.csv', fixture('single-amount.csv')))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Check before importing' })).toHaveFocus())
+  })
+
+  it('says an empty file is empty', async () => {
+    const db = await freshDb()
+    const user = setup(db)
+    await pickAccount(user, 'Everyday')
+    await upload(user, csv('empty.csv', '  \n'))
+    expect(await screen.findByText('empty.csv is empty.')).toBeInTheDocument()
+  })
+
+  it('says when a file has headings but no transactions', async () => {
+    const db = await freshDb()
+    const user = setup(db)
+    await pickAccount(user, 'Everyday')
+    await mapAndPreview(user, csv('header-only.csv', 'Date,Description,Amount\n'))
+    expect(screen.getByText('No transactions found in header-only.csv.')).toBeInTheDocument()
+    expect(screen.queryByText(/already in your records/)).not.toBeInTheDocument()
+  })
+
+  it('ignores files dropped while an import is running', async () => {
+    const db = await freshDb()
+    const user = setup(db)
+    await pickAccount(user, 'Everyday')
+    await mapAndPreview(user, csv('single-amount.csv', fixture('single-amount.csv')))
+    vi.spyOn(db.rules, 'filter').mockImplementationOnce(
+      () => ({ toArray: () => new Promise((resolve) => setTimeout(() => resolve([]), 200)) }) as never,
+    )
+    await user.click(screen.getByRole('button', { name: /^Import 3 transactions/ }))
+    expect(screen.getByLabelText('Account')).toBeDisabled()
+    const pdf = new File(['x'], 'zzz.pdf', { type: 'application/pdf' })
+    fireEvent.drop(screen.getByRole('group', { name: 'Statement files' }), { dataTransfer: { files: [pdf] } })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByText("zzz.pdf isn't a CSV file.")).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Check before importing' })).toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'Done' })
+  })
+})
+
 describe('Import: transfers, refunds and attention', () => {
   async function seededProfiles(db: BudgetDB) {
     const p = { id: 'p', bank: 'B', dateFormat: 'DD/MM/YYYY' as const, dateColumn: 0, descriptionColumn: 1, amountMode: 'single' as const,
@@ -353,5 +420,19 @@ describe('Import: transfers, refunds and attention', () => {
     await upload(user, csv('card.csv', stmt(['04/06/2026,PAYMENT RECEIVED THANK YOU,150.00'])))
     await user.click(await screen.findByRole('button', { name: /^Import 1 transaction/ }))
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument())
+  })
+
+  it('still shows the outcomes when re-checking transfers and refunds fails', async () => {
+    const db = await freshDb()
+    await seededProfiles(db)
+    vi.spyOn(db.transactions, 'bulkPut').mockRejectedValue(new Error('nope'))
+    const user = setup(db)
+    await pickAccount(user, 'Everyday')
+    await upload(user, csv('r.csv', stmt(['01/04/2026,ZARA 12,-10.00', '05/04/2026,ZARA 99,10.00'])))
+    await user.click(await screen.findByRole('button', { name: /^Import 2 transactions/ }))
+    await screen.findByRole('heading', { name: 'Done' })
+    expect(screen.getByText('Imported 2 transactions.')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Undo import of r.csv' }).length).toBeGreaterThan(0)
+    expect(screen.getByText("Imported, but transfers and refunds couldn't be re-checked. They'll be fixed on your next import.")).toBeInTheDocument()
   })
 })

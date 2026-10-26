@@ -28,6 +28,9 @@ describe('sniffDateFormat', () => {
     expect(sniffDateFormat(['03/04/2026', '05/06/2026'])).toEqual({ format: 'DD/MM/YYYY', ambiguous: true })
     expect(sniffDateFormat([])).toEqual({ format: 'DD/MM/YYYY', ambiguous: true })
   })
+  it('does not treat unpadded ISO-like dates as ISO', () => {
+    expect(sniffDateFormat(['2026-3-5']).format).toBe('DD/MM/YYYY')
+  })
   it('recognises ISO and named-month dates', () => {
     expect(sniffDateFormat(['2026-04-03']).format).toBe('YYYY-MM-DD')
     expect(sniffDateFormat(['3 Apr 2026', '13 Apr 2026']).format).toBe('D MMM YYYY')

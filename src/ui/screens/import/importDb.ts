@@ -30,7 +30,7 @@ export async function importFiles(
   db: BudgetDB,
   files: PreviewFile[],
   now: number = Date.now(),
-): Promise<{ results: FileResult[]; failed?: { fileName: string } }> {
+): Promise<{ results: FileResult[]; failed?: { fileName: string }; flagsFailed?: boolean }> {
   const learned: Rule[] = await db.rules.filter((r) => r.source === 'learned').toArray()
   const rules = [...defaultRules, ...learned]
   const results: FileResult[] = []
@@ -47,7 +47,11 @@ export async function importFiles(
     await reconcileStoredFlags(db).catch(() => 0)
     return { results, failed: { fileName: files[results.length]?.name ?? 'the file' } }
   }
-  await reconcileStoredFlags(db)
+  try {
+    await reconcileStoredFlags(db)
+  } catch {
+    return { results, flagsFailed: true }
+  }
   return { results }
 }
 
